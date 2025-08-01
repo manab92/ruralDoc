@@ -1,148 +1,157 @@
 #pragma once
 
+#include "BaseEntity.h"
+#include "User.h"
 #include <string>
 #include <vector>
 #include <chrono>
-#include <memory>
-#include "User.h"
 
-namespace healthcare {
-namespace models {
+namespace healthcare::models {
 
 enum class DoctorStatus {
-    PENDING_VERIFICATION = 1,
-    VERIFIED = 2,
-    SUSPENDED = 3,
-    INACTIVE = 4
+    PENDING_VERIFICATION,
+    VERIFIED,
+    SUSPENDED,
+    INACTIVE
 };
 
 enum class ConsultationType {
-    ONLINE = 1,
-    OFFLINE = 2,
-    BOTH = 3
+    ONLINE,
+    OFFLINE,
+    BOTH
 };
 
 struct Specialization {
     std::string id;
     std::string name;
     std::string description;
+    std::string category;
 };
 
-struct Education {
-    std::string degree;
-    std::string institution;
-    int year_of_completion;
-    std::string certificate_url;
-};
-
-struct Experience {
-    std::string hospital_name;
-    std::string position;
-    int years;
-    std::string description;
+struct DoctorDocument {
+    std::string id;
+    std::string type;  // medical_license, degree_certificate, etc.
+    std::string url;
+    bool is_verified;
+    std::chrono::system_clock::time_point uploaded_at;
+    std::chrono::system_clock::time_point verified_at;
 };
 
 struct TimeSlot {
     std::chrono::system_clock::time_point start_time;
     std::chrono::system_clock::time_point end_time;
     bool is_available;
+    ConsultationType consultation_type;
 };
 
-class Doctor : public User {
-private:
-    std::string license_number_;
-    std::vector<Specialization> specializations_;
-    std::vector<Education> education_;
-    std::vector<Experience> experience_;
-    int years_of_experience_;
-    double consultation_fee_;
-    double rating_;
-    int total_reviews_;
-    std::string bio_;
-    DoctorStatus status_;
-    ConsultationType consultation_type_;
-    std::string clinic_id_;  // Associated clinic
-    std::vector<TimeSlot> availability_;
-    std::string calendar_id_;  // For calendar integration
-    bool is_available_now_;
-    std::chrono::minutes consultation_duration_;  // Default consultation time
-    std::vector<std::string> languages_;
-    std::string qualification_certificate_url_;
-    std::chrono::system_clock::time_point verification_date_;
-
+class Doctor : public BaseEntity {
 public:
-    // Constructors
     Doctor();
-    Doctor(const std::string& email, const std::string& password_hash,
-           const std::string& first_name, const std::string& last_name,
-           const std::string& phone_number, const std::string& license_number);
+    ~Doctor() override = default;
 
-    // Getters
-    const std::string& getLicenseNumber() const { return license_number_; }
-    const std::vector<Specialization>& getSpecializations() const { return specializations_; }
-    const std::vector<Education>& getEducation() const { return education_; }
-    const std::vector<Experience>& getExperience() const { return experience_; }
+    // Basic info
+    const std::string& getUserId() const { return user_id_; }
+    const std::string& getMedicalLicenseNumber() const { return medical_license_number_; }
+    const std::string& getQualification() const { return qualification_; }
     int getYearsOfExperience() const { return years_of_experience_; }
+    DoctorStatus getStatus() const { return status_; }
+    
+    // Consultation details
     double getConsultationFee() const { return consultation_fee_; }
+    int getConsultationDuration() const { return consultation_duration_minutes_; }
+    const std::vector<ConsultationType>& getConsultationTypes() const { return consultation_types_; }
+    
+    // Rating and reviews
     double getRating() const { return rating_; }
     int getTotalReviews() const { return total_reviews_; }
+    
+    // Availability
+    const std::string& getAvailabilityPattern() const { return availability_pattern_; }
+    bool isAvailableToday() const { return is_available_today_; }
+    
+    // Professional details
     const std::string& getBio() const { return bio_; }
-    DoctorStatus getStatus() const { return status_; }
-    ConsultationType getConsultationType() const { return consultation_type_; }
-    const std::string& getClinicId() const { return clinic_id_; }
-    const std::vector<TimeSlot>& getAvailability() const { return availability_; }
-    const std::string& getCalendarId() const { return calendar_id_; }
-    bool isAvailableNow() const { return is_available_now_; }
-    std::chrono::minutes getConsultationDuration() const { return consultation_duration_; }
-    const std::vector<std::string>& getLanguages() const { return languages_; }
-    const std::string& getQualificationCertificateUrl() const { return qualification_certificate_url_; }
-    const std::chrono::system_clock::time_point& getVerificationDate() const { return verification_date_; }
+    const std::string& getLanguages() const { return languages_; }
+    const std::vector<Specialization>& getSpecializations() const { return specializations_; }
+    const std::vector<std::string>& getClinicIds() const { return clinic_ids_; }
+    const std::vector<DoctorDocument>& getDocuments() const { return documents_; }
 
     // Setters
-    void setLicenseNumber(const std::string& license_number) { license_number_ = license_number; }
-    void setSpecializations(const std::vector<Specialization>& specializations) { specializations_ = specializations; }
-    void setEducation(const std::vector<Education>& education) { education_ = education; }
-    void setExperience(const std::vector<Experience>& experience) { experience_ = experience; }
-    void setYearsOfExperience(int years_of_experience) { years_of_experience_ = years_of_experience; }
-    void setConsultationFee(double consultation_fee) { consultation_fee_ = consultation_fee; }
-    void setRating(double rating) { rating_ = rating; }
-    void setTotalReviews(int total_reviews) { total_reviews_ = total_reviews; }
-    void setBio(const std::string& bio) { bio_ = bio; }
+    void setUserId(const std::string& user_id) { user_id_ = user_id; }
+    void setMedicalLicenseNumber(const std::string& license) { medical_license_number_ = license; }
+    void setQualification(const std::string& qualification) { qualification_ = qualification; }
+    void setYearsOfExperience(int years) { years_of_experience_ = years; }
     void setStatus(DoctorStatus status) { status_ = status; }
-    void setConsultationType(ConsultationType consultation_type) { consultation_type_ = consultation_type; }
-    void setClinicId(const std::string& clinic_id) { clinic_id_ = clinic_id; }
-    void setAvailability(const std::vector<TimeSlot>& availability) { availability_ = availability; }
-    void setCalendarId(const std::string& calendar_id) { calendar_id_ = calendar_id; }
-    void setAvailableNow(bool is_available_now) { is_available_now_ = is_available_now; }
-    void setConsultationDuration(std::chrono::minutes consultation_duration) { consultation_duration_ = consultation_duration; }
-    void setLanguages(const std::vector<std::string>& languages) { languages_ = languages; }
-    void setQualificationCertificateUrl(const std::string& qualification_certificate_url) { qualification_certificate_url_ = qualification_certificate_url; }
-    void setVerificationDate(const std::chrono::system_clock::time_point& verification_date) { verification_date_ = verification_date; }
+    void setConsultationFee(double fee) { consultation_fee_ = fee; }
+    void setConsultationDuration(int minutes) { consultation_duration_minutes_ = minutes; }
+    void setConsultationTypes(const std::vector<ConsultationType>& types) { consultation_types_ = types; }
+    void setRating(double rating) { rating_ = rating; }
+    void setTotalReviews(int count) { total_reviews_ = count; }
+    void setAvailabilityPattern(const std::string& pattern) { availability_pattern_ = pattern; }
+    void setAvailableToday(bool available) { is_available_today_ = available; }
+    void setBio(const std::string& bio) { bio_ = bio; }
+    void setLanguages(const std::string& languages) { languages_ = languages; }
+    void setSpecializations(const std::vector<Specialization>& specializations) { specializations_ = specializations; }
+    void setClinicIds(const std::vector<std::string>& clinic_ids) { clinic_ids_ = clinic_ids; }
+    void setDocuments(const std::vector<DoctorDocument>& documents) { documents_ = documents; }
 
-    // Business methods
+    // Utility methods
+    bool isVerified() const { return status_ == DoctorStatus::VERIFIED; }
+    bool isActive() const { return status_ == DoctorStatus::VERIFIED || status_ == DoctorStatus::PENDING_VERIFICATION; }
+    bool hasSpecialization(const std::string& specialization_name) const;
+    bool supportsConsultationType(ConsultationType type) const;
     void addSpecialization(const Specialization& specialization);
     void removeSpecialization(const std::string& specialization_id);
-    void addEducation(const Education& education);
-    void addExperience(const Experience& experience);
-    void updateRating(double new_rating);
-    
-    // Availability management
-    void setAvailableSlot(const std::chrono::system_clock::time_point& start, 
-                         const std::chrono::system_clock::time_point& end);
-    void blockTimeSlot(const std::chrono::system_clock::time_point& start,
-                      const std::chrono::system_clock::time_point& end);
-    bool isAvailableAt(const std::chrono::system_clock::time_point& time) const;
-    std::vector<TimeSlot> getAvailableSlots(const std::chrono::system_clock::time_point& date) const;
+    void addClinic(const std::string& clinic_id);
+    void removeClinic(const std::string& clinic_id);
+    void addDocument(const DoctorDocument& document);
+    void updateRating(double new_rating, int review_count);
 
-    // Validation
-    bool isQualified() const;
-    bool canConsultOnline() const;
-    bool canConsultOffline() const;
+    // Availability management
+    std::vector<TimeSlot> getAvailableSlots(
+        const std::chrono::system_clock::time_point& start_date,
+        const std::chrono::system_clock::time_point& end_date,
+        ConsultationType type = ConsultationType::BOTH
+    ) const;
+    
+    bool isAvailableAt(const std::chrono::system_clock::time_point& time, ConsultationType type) const;
 
     // Serialization
     nlohmann::json toJson() const override;
     void fromJson(const nlohmann::json& json) override;
+
+private:
+    std::string user_id_;  // Reference to User table
+    std::string medical_license_number_;
+    std::string qualification_;
+    int years_of_experience_;
+    DoctorStatus status_;
+    
+    // Consultation details
+    double consultation_fee_;
+    int consultation_duration_minutes_;
+    std::vector<ConsultationType> consultation_types_;
+    
+    // Rating and reviews
+    double rating_;
+    int total_reviews_;
+    
+    // Availability
+    std::string availability_pattern_;  // JSON string for complex patterns
+    bool is_available_today_;
+    
+    // Professional details
+    std::string bio_;
+    std::string languages_;  // Comma-separated language codes
+    std::vector<Specialization> specializations_;
+    std::vector<std::string> clinic_ids_;
+    std::vector<DoctorDocument> documents_;
 };
 
-} // namespace models
-} // namespace healthcare
+// Utility functions
+std::string doctorStatusToString(DoctorStatus status);
+DoctorStatus stringToDoctorStatus(const std::string& status_str);
+std::string consultationTypeToString(ConsultationType type);
+ConsultationType stringToConsultationType(const std::string& type_str);
+
+} // namespace healthcare::models

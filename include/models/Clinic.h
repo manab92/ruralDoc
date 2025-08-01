@@ -1,44 +1,44 @@
 #pragma once
 
+#include "BaseEntity.h"
 #include <string>
 #include <vector>
 #include <chrono>
-#include <memory>
-#include "BaseEntity.h"
 
-namespace healthcare {
-namespace models {
+namespace healthcare::models {
 
 enum class ClinicStatus {
-    ACTIVE = 1,
-    INACTIVE = 2,
-    SUSPENDED = 3,
-    PENDING_VERIFICATION = 4
-};
-
-struct OperatingHours {
-    int day_of_week;  // 0=Sunday, 1=Monday, etc.
-    std::chrono::system_clock::time_point opening_time;
-    std::chrono::system_clock::time_point closing_time;
-    bool is_closed;
+    ACTIVE,
+    INACTIVE,
+    PENDING_VERIFICATION,
+    SUSPENDED
 };
 
 struct ContactInfo {
-    std::string phone_number;
+    std::string phone_primary;
+    std::string phone_secondary;
     std::string email;
     std::string website;
-    std::string emergency_contact;
 };
 
 struct Address {
     std::string street_address;
+    std::string landmark;
     std::string city;
     std::string state;
     std::string pincode;
     std::string country;
     double latitude;
     double longitude;
-    std::string landmark;
+};
+
+struct WorkingHours {
+    std::string day_of_week;  // MONDAY, TUESDAY, etc.
+    std::string start_time;   // HH:MM format
+    std::string end_time;     // HH:MM format
+    bool is_closed;
+    std::string break_start;  // Optional lunch break
+    std::string break_end;
 };
 
 struct Facility {
@@ -48,128 +48,124 @@ struct Facility {
 };
 
 class Clinic : public BaseEntity {
-private:
-    std::string name_;
-    std::string description_;
-    Address address_;
-    ContactInfo contact_info_;
-    std::string license_number_;
-    std::string registration_number_;
-    ClinicStatus status_;
-    std::vector<OperatingHours> operating_hours_;
-    std::vector<std::string> doctor_ids_;  // Associated doctors
-    std::vector<Facility> facilities_;
-    std::vector<std::string> services_;
-    std::vector<std::string> images_;  // URLs to clinic images
-    double rating_;
-    int total_reviews_;
-    bool emergency_services_;
-    bool pharmacy_available_;
-    bool lab_services_;
-    bool parking_available_;
-    int total_beds_;
-    int available_beds_;
-    std::string admin_user_id_;  // Clinic admin
-    std::chrono::system_clock::time_point verification_date_;
-    std::string verification_document_url_;
-
 public:
-    // Constructors
     Clinic();
-    Clinic(const std::string& name, const std::string& license_number,
-           const Address& address, const ContactInfo& contact_info);
+    ~Clinic() override = default;
 
-    // Getters
+    // Basic information
     const std::string& getName() const { return name_; }
     const std::string& getDescription() const { return description_; }
-    const Address& getAddress() const { return address_; }
-    const ContactInfo& getContactInfo() const { return contact_info_; }
-    const std::string& getLicenseNumber() const { return license_number_; }
     const std::string& getRegistrationNumber() const { return registration_number_; }
     ClinicStatus getStatus() const { return status_; }
-    const std::vector<OperatingHours>& getOperatingHours() const { return operating_hours_; }
-    const std::vector<std::string>& getDoctorIds() const { return doctor_ids_; }
+    
+    // Contact and location
+    const ContactInfo& getContactInfo() const { return contact_info_; }
+    const Address& getAddress() const { return address_; }
+    
+    // Operational details
+    const std::vector<WorkingHours>& getWorkingHours() const { return working_hours_; }
     const std::vector<Facility>& getFacilities() const { return facilities_; }
     const std::vector<std::string>& getServices() const { return services_; }
-    const std::vector<std::string>& getImages() const { return images_; }
+    
+    // Media and branding
+    const std::string& getLogoUrl() const { return logo_url_; }
+    const std::vector<std::string>& getImageUrls() const { return image_urls_; }
+    
+    // Rating and reviews
     double getRating() const { return rating_; }
     int getTotalReviews() const { return total_reviews_; }
-    bool hasEmergencyServices() const { return emergency_services_; }
-    bool hasPharmacy() const { return pharmacy_available_; }
-    bool hasLabServices() const { return lab_services_; }
-    bool hasParkingAvailable() const { return parking_available_; }
-    int getTotalBeds() const { return total_beds_; }
-    int getAvailableBeds() const { return available_beds_; }
-    const std::string& getAdminUserId() const { return admin_user_id_; }
-    const std::chrono::system_clock::time_point& getVerificationDate() const { return verification_date_; }
-    const std::string& getVerificationDocumentUrl() const { return verification_document_url_; }
+    
+    // Administrative
+    const std::string& getOwnerId() const { return owner_id_; }
+    const std::vector<std::string>& getDoctorIds() const { return doctor_ids_; }
+    
+    // Emergency details
+    bool hasEmergencyServices() const { return has_emergency_services_; }
+    const std::string& getEmergencyContact() const { return emergency_contact_; }
 
     // Setters
     void setName(const std::string& name) { name_ = name; }
     void setDescription(const std::string& description) { description_ = description; }
-    void setAddress(const Address& address) { address_ = address; }
-    void setContactInfo(const ContactInfo& contact_info) { contact_info_ = contact_info; }
-    void setLicenseNumber(const std::string& license_number) { license_number_ = license_number; }
-    void setRegistrationNumber(const std::string& registration_number) { registration_number_ = registration_number; }
+    void setRegistrationNumber(const std::string& reg_number) { registration_number_ = reg_number; }
     void setStatus(ClinicStatus status) { status_ = status; }
-    void setOperatingHours(const std::vector<OperatingHours>& operating_hours) { operating_hours_ = operating_hours; }
-    void setDoctorIds(const std::vector<std::string>& doctor_ids) { doctor_ids_ = doctor_ids; }
+    void setContactInfo(const ContactInfo& contact_info) { contact_info_ = contact_info; }
+    void setAddress(const Address& address) { address_ = address; }
+    void setWorkingHours(const std::vector<WorkingHours>& working_hours) { working_hours_ = working_hours; }
     void setFacilities(const std::vector<Facility>& facilities) { facilities_ = facilities; }
     void setServices(const std::vector<std::string>& services) { services_ = services; }
-    void setImages(const std::vector<std::string>& images) { images_ = images; }
+    void setLogoUrl(const std::string& logo_url) { logo_url_ = logo_url; }
+    void setImageUrls(const std::vector<std::string>& image_urls) { image_urls_ = image_urls; }
     void setRating(double rating) { rating_ = rating; }
-    void setTotalReviews(int total_reviews) { total_reviews_ = total_reviews; }
-    void setEmergencyServices(bool emergency_services) { emergency_services_ = emergency_services; }
-    void setPharmacyAvailable(bool pharmacy_available) { pharmacy_available_ = pharmacy_available; }
-    void setLabServices(bool lab_services) { lab_services_ = lab_services; }
-    void setParkingAvailable(bool parking_available) { parking_available_ = parking_available; }
-    void setTotalBeds(int total_beds) { total_beds_ = total_beds; }
-    void setAvailableBeds(int available_beds) { available_beds_ = available_beds; }
-    void setAdminUserId(const std::string& admin_user_id) { admin_user_id_ = admin_user_id; }
-    void setVerificationDate(const std::chrono::system_clock::time_point& verification_date) { verification_date_ = verification_date; }
-    void setVerificationDocumentUrl(const std::string& verification_document_url) { verification_document_url_ = verification_document_url; }
-
-    // Business methods
-    void addDoctor(const std::string& doctor_id);
-    void removeDoctor(const std::string& doctor_id);
-    void addFacility(const Facility& facility);
-    void removeFacility(const std::string& facility_name);
-    void addService(const std::string& service);
-    void removeService(const std::string& service);
-    void addImage(const std::string& image_url);
-    void removeImage(const std::string& image_url);
-
-    // Operating hours management
-    void setOperatingHours(int day_of_week, 
-                          const std::chrono::system_clock::time_point& opening_time,
-                          const std::chrono::system_clock::time_point& closing_time);
-    void markDayClosed(int day_of_week);
-    bool isOpenAt(const std::chrono::system_clock::time_point& time) const;
-    bool isOpenNow() const;
-    OperatingHours getTodaysHours() const;
-
-    // Bed management
-    void updateAvailableBeds(int available_beds);
-    bool hasBedAvailable() const;
-    double getBedOccupancyRate() const;
-
-    // Rating management
-    void updateRating(double new_rating);
+    void setTotalReviews(int count) { total_reviews_ = count; }
+    void setOwnerId(const std::string& owner_id) { owner_id_ = owner_id; }
+    void setDoctorIds(const std::vector<std::string>& doctor_ids) { doctor_ids_ = doctor_ids; }
+    void setEmergencyServices(bool has_emergency) { has_emergency_services_ = has_emergency; }
+    void setEmergencyContact(const std::string& contact) { emergency_contact_ = contact; }
 
     // Utility methods
+    bool isOperational() const { return status_ == ClinicStatus::ACTIVE; }
+    bool isOpenNow() const;
+    bool isOpenAt(const std::chrono::system_clock::time_point& time) const;
+    std::string getFullAddress() const;
     double getDistanceFrom(double latitude, double longitude) const;
-    bool isWithinRadius(double latitude, double longitude, double radius_km) const;
-    std::vector<std::string> getAvailableDoctors() const;
-
-    // Validation
-    bool isValidLicense() const;
-    bool isActive() const;
-    bool canAcceptAppointments() const;
+    
+    // Management operations
+    void addDoctor(const std::string& doctor_id);
+    void removeDoctor(const std::string& doctor_id);
+    void addService(const std::string& service);
+    void removeService(const std::string& service);
+    void addFacility(const Facility& facility);
+    void removeFacility(const std::string& facility_name);
+    void updateWorkingHours(const std::string& day, const std::string& start, const std::string& end);
+    void updateRating(double new_rating, int review_count);
+    
+    // Search and filter helpers
+    bool hasService(const std::string& service) const;
+    bool hasFacility(const std::string& facility_name) const;
+    bool hasDoctor(const std::string& doctor_id) const;
+    std::vector<std::string> getAvailableDays() const;
 
     // Serialization
     nlohmann::json toJson() const override;
     void fromJson(const nlohmann::json& json) override;
+
+private:
+    // Basic information
+    std::string name_;
+    std::string description_;
+    std::string registration_number_;
+    ClinicStatus status_;
+    
+    // Contact and location
+    ContactInfo contact_info_;
+    Address address_;
+    
+    // Operational details
+    std::vector<WorkingHours> working_hours_;
+    std::vector<Facility> facilities_;
+    std::vector<std::string> services_;
+    
+    // Media and branding
+    std::string logo_url_;
+    std::vector<std::string> image_urls_;
+    
+    // Rating and reviews
+    double rating_;
+    int total_reviews_;
+    
+    // Administrative
+    std::string owner_id_;  // Reference to User who owns/manages clinic
+    std::vector<std::string> doctor_ids_;  // Doctors associated with clinic
+    
+    // Emergency details
+    bool has_emergency_services_;
+    std::string emergency_contact_;
 };
 
-} // namespace models
-} // namespace healthcare
+// Utility functions
+std::string clinicStatusToString(ClinicStatus status);
+ClinicStatus stringToClinicStatus(const std::string& status_str);
+std::string getCurrentDayOfWeek();
+bool isTimeInRange(const std::string& current_time, const std::string& start_time, const std::string& end_time);
+
+} // namespace healthcare::models

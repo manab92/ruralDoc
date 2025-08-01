@@ -1,164 +1,243 @@
 #pragma once
 
+#include "BaseEntity.h"
 #include <string>
 #include <vector>
 #include <chrono>
-#include <memory>
-#include "BaseEntity.h"
 
-namespace healthcare {
-namespace models {
+namespace healthcare::models {
 
 enum class PrescriptionStatus {
-    DRAFT = 1,
-    ISSUED = 2,
-    DISPENSED = 3,
-    CANCELLED = 4
+    ACTIVE,
+    COMPLETED,
+    CANCELLED,
+    EXPIRED
+};
+
+enum class MedicineFrequency {
+    ONCE_DAILY,
+    TWICE_DAILY,
+    THREE_TIMES_DAILY,
+    FOUR_TIMES_DAILY,
+    AS_NEEDED,
+    WEEKLY,
+    CUSTOM
 };
 
 enum class MedicineType {
-    TABLET = 1,
-    CAPSULE = 2,
-    SYRUP = 3,
-    INJECTION = 4,
-    CREAM = 5,
-    DROPS = 6,
-    OTHER = 7
+    TABLET,
+    CAPSULE,
+    SYRUP,
+    INJECTION,
+    DROPS,
+    CREAM,
+    OINTMENT,
+    INHALER,
+    OTHER
 };
 
 struct Medicine {
+    std::string id;
     std::string name;
     std::string generic_name;
-    std::string dosage;
-    std::string frequency;  // e.g., "2 times daily"
-    int duration_days;
-    std::string instructions;  // e.g., "Take after meals"
+    std::string brand_name;
     MedicineType type;
-    int quantity;
-    bool is_substitutable;
+    std::string dosage;           // e.g., "5mg", "10ml"
+    MedicineFrequency frequency;
+    std::string custom_frequency; // For CUSTOM frequency
+    int duration_days;
+    std::string instructions;     // e.g., "Take after meals"
+    std::string timing;          // e.g., "Morning-Evening"
+    bool is_before_food;
+    bool is_after_food;
+    std::string notes;
+    double quantity;             // Number of tablets/bottles prescribed
+    bool is_substitute_allowed;  // Can pharmacist substitute with generic
+};
+
+struct Diagnosis {
+    std::string primary_diagnosis;
+    std::vector<std::string> secondary_diagnoses;
+    std::string icd_code;        // International Classification of Diseases code
+    std::string severity;        // MILD, MODERATE, SEVERE
+    std::string description;
 };
 
 struct VitalSigns {
-    double temperature;  // Celsius
-    int blood_pressure_systolic;
-    int blood_pressure_diastolic;
-    int heart_rate;  // bpm
-    double weight;  // kg
-    double height;  // cm
-    std::string additional_notes;
+    double blood_pressure_systolic;
+    double blood_pressure_diastolic;
+    double heart_rate;
+    double temperature;
+    double weight;
+    double height;
+    double oxygen_saturation;
+    std::string notes;
+};
+
+struct FollowUpInstruction {
+    std::chrono::system_clock::time_point follow_up_date;
+    std::string reason;
+    std::string instructions;
+    bool is_urgent;
+    std::string specialist_referral;  // If referral needed
 };
 
 class Prescription : public BaseEntity {
-private:
-    std::string appointment_id_;
-    std::string doctor_id_;
-    std::string user_id_;
-    std::string clinic_id_;
-    std::vector<Medicine> medicines_;
-    std::string diagnosis_;
-    std::string symptoms_;
-    std::string treatment_advice_;
-    std::string follow_up_instructions_;
-    std::chrono::system_clock::time_point follow_up_date_;
-    VitalSigns vital_signs_;
-    PrescriptionStatus status_;
-    std::string prescription_file_url_;  // PDF file URL
-    std::string prescription_number_;  // Unique prescription number
-    std::string digital_signature_;
-    bool is_digital_;
-    std::string pharmacy_id_;  // If dispensed from specific pharmacy
-    std::chrono::system_clock::time_point dispensed_at_;
-    std::string dispensed_by_;  // Pharmacist ID
-    std::string lab_tests_recommended_;
-    std::string allergies_noted_;
-    std::string emergency_contact_info_;
-
 public:
-    // Constructors
     Prescription();
-    Prescription(const std::string& appointment_id, const std::string& doctor_id,
-                 const std::string& user_id, const std::string& diagnosis);
+    ~Prescription() override = default;
 
-    // Getters
+    // Core information
     const std::string& getAppointmentId() const { return appointment_id_; }
     const std::string& getDoctorId() const { return doctor_id_; }
-    const std::string& getUserId() const { return user_id_; }
+    const std::string& getPatientId() const { return patient_id_; }
     const std::string& getClinicId() const { return clinic_id_; }
-    const std::vector<Medicine>& getMedicines() const { return medicines_; }
-    const std::string& getDiagnosis() const { return diagnosis_; }
-    const std::string& getSymptoms() const { return symptoms_; }
-    const std::string& getTreatmentAdvice() const { return treatment_advice_; }
-    const std::string& getFollowUpInstructions() const { return follow_up_instructions_; }
-    const std::chrono::system_clock::time_point& getFollowUpDate() const { return follow_up_date_; }
-    const VitalSigns& getVitalSigns() const { return vital_signs_; }
     PrescriptionStatus getStatus() const { return status_; }
-    const std::string& getPrescriptionFileUrl() const { return prescription_file_url_; }
+
+    // Medical information
+    const Diagnosis& getDiagnosis() const { return diagnosis_; }
+    const VitalSigns& getVitalSigns() const { return vital_signs_; }
+    const std::vector<Medicine>& getMedicines() const { return medicines_; }
+    
+    // Instructions and notes
+    const std::string& getDoctorNotes() const { return doctor_notes_; }
+    const std::string& getGeneralInstructions() const { return general_instructions_; }
+    const std::string& getDietRecommendations() const { return diet_recommendations_; }
+    const std::string& getLifestyleAdvice() const { return lifestyle_advice_; }
+    
+    // Follow-up information
+    const FollowUpInstruction& getFollowUpInstruction() const { return follow_up_instruction_; }
+    const std::vector<std::string>& getLabTests() const { return lab_tests_; }
+    const std::vector<std::string>& getImagingTests() const { return imaging_tests_; }
+    
+    // Validity and dates
+    const std::chrono::system_clock::time_point& getIssuedDate() const { return issued_date_; }
+    const std::chrono::system_clock::time_point& getValidUntil() const { return valid_until_; }
+    
+    // Document information
     const std::string& getPrescriptionNumber() const { return prescription_number_; }
     const std::string& getDigitalSignature() const { return digital_signature_; }
-    bool isDigital() const { return is_digital_; }
-    const std::string& getPharmacyId() const { return pharmacy_id_; }
-    const std::chrono::system_clock::time_point& getDispensedAt() const { return dispensed_at_; }
-    const std::string& getDispensedBy() const { return dispensed_by_; }
-    const std::string& getLabTestsRecommended() const { return lab_tests_recommended_; }
-    const std::string& getAllergiesNoted() const { return allergies_noted_; }
-    const std::string& getEmergencyContactInfo() const { return emergency_contact_info_; }
+    const std::string& getQrCode() const { return qr_code_; }
+    bool isDigitallyVerified() const { return is_digitally_verified_; }
 
     // Setters
     void setAppointmentId(const std::string& appointment_id) { appointment_id_ = appointment_id; }
     void setDoctorId(const std::string& doctor_id) { doctor_id_ = doctor_id; }
-    void setUserId(const std::string& user_id) { user_id_ = user_id; }
+    void setPatientId(const std::string& patient_id) { patient_id_ = patient_id; }
     void setClinicId(const std::string& clinic_id) { clinic_id_ = clinic_id; }
-    void setMedicines(const std::vector<Medicine>& medicines) { medicines_ = medicines; }
-    void setDiagnosis(const std::string& diagnosis) { diagnosis_ = diagnosis; }
-    void setSymptoms(const std::string& symptoms) { symptoms_ = symptoms; }
-    void setTreatmentAdvice(const std::string& treatment_advice) { treatment_advice_ = treatment_advice; }
-    void setFollowUpInstructions(const std::string& follow_up_instructions) { follow_up_instructions_ = follow_up_instructions; }
-    void setFollowUpDate(const std::chrono::system_clock::time_point& follow_up_date) { follow_up_date_ = follow_up_date; }
+    void setStatus(PrescriptionStatus status) { status_ = status; updateTimestamp(); }
+    void setDiagnosis(const Diagnosis& diagnosis) { diagnosis_ = diagnosis; }
     void setVitalSigns(const VitalSigns& vital_signs) { vital_signs_ = vital_signs; }
-    void setStatus(PrescriptionStatus status) { status_ = status; }
-    void setPrescriptionFileUrl(const std::string& prescription_file_url) { prescription_file_url_ = prescription_file_url; }
-    void setPrescriptionNumber(const std::string& prescription_number) { prescription_number_ = prescription_number; }
-    void setDigitalSignature(const std::string& digital_signature) { digital_signature_ = digital_signature; }
-    void setDigital(bool is_digital) { is_digital_ = is_digital; }
-    void setPharmacyId(const std::string& pharmacy_id) { pharmacy_id_ = pharmacy_id; }
-    void setDispensedAt(const std::chrono::system_clock::time_point& dispensed_at) { dispensed_at_ = dispensed_at; }
-    void setDispensedBy(const std::string& dispensed_by) { dispensed_by_ = dispensed_by; }
-    void setLabTestsRecommended(const std::string& lab_tests_recommended) { lab_tests_recommended_ = lab_tests_recommended; }
-    void setAllergiesNoted(const std::string& allergies_noted) { allergies_noted_ = allergies_noted; }
-    void setEmergencyContactInfo(const std::string& emergency_contact_info) { emergency_contact_info_ = emergency_contact_info; }
+    void setMedicines(const std::vector<Medicine>& medicines) { medicines_ = medicines; }
+    void setDoctorNotes(const std::string& notes) { doctor_notes_ = notes; }
+    void setGeneralInstructions(const std::string& instructions) { general_instructions_ = instructions; }
+    void setDietRecommendations(const std::string& diet) { diet_recommendations_ = diet; }
+    void setLifestyleAdvice(const std::string& advice) { lifestyle_advice_ = advice; }
+    void setFollowUpInstruction(const FollowUpInstruction& instruction) { follow_up_instruction_ = instruction; }
+    void setLabTests(const std::vector<std::string>& tests) { lab_tests_ = tests; }
+    void setImagingTests(const std::vector<std::string>& tests) { imaging_tests_ = tests; }
+    void setIssuedDate(const std::chrono::system_clock::time_point& date) { issued_date_ = date; }
+    void setValidUntil(const std::chrono::system_clock::time_point& date) { valid_until_ = date; }
+    void setPrescriptionNumber(const std::string& number) { prescription_number_ = number; }
+    void setDigitalSignature(const std::string& signature) { digital_signature_ = signature; }
+    void setQrCode(const std::string& qr_code) { qr_code_ = qr_code; }
+    void setDigitallyVerified(bool verified) { is_digitally_verified_ = verified; }
 
     // Medicine management
     void addMedicine(const Medicine& medicine);
-    void removeMedicine(const std::string& medicine_name);
-    void updateMedicine(const std::string& medicine_name, const Medicine& updated_medicine);
-
-    // Status management
-    void issuePrescription();
-    void markAsDispensed(const std::string& pharmacy_id, const std::string& dispensed_by);
-    void cancelPrescription();
+    void removeMedicine(const std::string& medicine_id);
+    void updateMedicine(const std::string& medicine_id, const Medicine& updated_medicine);
+    Medicine* findMedicine(const std::string& medicine_id);
+    
+    // Test management
+    void addLabTest(const std::string& test);
+    void removeLabTest(const std::string& test);
+    void addImagingTest(const std::string& test);
+    void removeImagingTest(const std::string& test);
 
     // Utility methods
-    std::string generatePrescriptionNumber();
-    void generateDigitalSignature(const std::string& doctor_private_key);
-    bool verifyDigitalSignature(const std::string& doctor_public_key) const;
-    bool needsFollowUp() const;
-    bool isExpired() const;  // Check if prescription is too old to be valid
-    int getTotalMedicineCount() const;
-    std::vector<std::string> getMedicineNames() const;
-
-    // PDF generation
-    std::string generatePrescriptionPDF() const;
-    bool uploadPrescriptionFile(const std::string& file_path);
-
+    bool isActive() const { return status_ == PrescriptionStatus::ACTIVE; }
+    bool isExpired() const;
+    bool isValid() const;
+    bool requiresFollowUp() const;
+    bool hasLabTests() const { return !lab_tests_.empty(); }
+    bool hasImagingTests() const { return !imaging_tests_.empty(); }
+    bool hasMedicines() const { return !medicines_.empty(); }
+    
+    int getTotalMedicines() const { return medicines_.size(); }
+    int getActiveMedicines() const;
+    std::chrono::days getValidityDays() const;
+    std::chrono::days getDaysUntilExpiry() const;
+    
     // Validation
     bool isValidPrescription() const;
-    bool canBeDispensed() const;
     bool hasDangerousInteractions() const;
+    std::vector<std::string> validateMedicines() const;
+    
+    // Document operations
+    void generatePrescriptionNumber();
+    void generateQrCode();
+    void generateDigitalSignature();
+    void markAsCompleted();
+    void markAsExpired();
+    void extendValidity(int additional_days);
+
+    // Search and filter
+    std::vector<Medicine> getMedicinesByType(MedicineType type) const;
+    std::vector<Medicine> getMedicinesByFrequency(MedicineFrequency frequency) const;
+    bool containsMedicine(const std::string& medicine_name) const;
 
     // Serialization
     nlohmann::json toJson() const override;
     void fromJson(const nlohmann::json& json) override;
+
+    // Export formats
+    nlohmann::json toPrintableJson() const;  // For printing/PDF generation
+    std::string toPlainText() const;         // For simple text format
+
+private:
+    // Core information
+    std::string appointment_id_;
+    std::string doctor_id_;
+    std::string patient_id_;
+    std::string clinic_id_;
+    PrescriptionStatus status_;
+
+    // Medical information
+    Diagnosis diagnosis_;
+    VitalSigns vital_signs_;
+    std::vector<Medicine> medicines_;
+
+    // Instructions and notes
+    std::string doctor_notes_;
+    std::string general_instructions_;
+    std::string diet_recommendations_;
+    std::string lifestyle_advice_;
+
+    // Follow-up and tests
+    FollowUpInstruction follow_up_instruction_;
+    std::vector<std::string> lab_tests_;
+    std::vector<std::string> imaging_tests_;
+
+    // Validity and document info
+    std::chrono::system_clock::time_point issued_date_;
+    std::chrono::system_clock::time_point valid_until_;
+    std::string prescription_number_;
+    std::string digital_signature_;
+    std::string qr_code_;
+    bool is_digitally_verified_;
+
+    // Helper methods
+    std::string generateUniqueNumber();
+    bool checkMedicineInteractions(const Medicine& medicine) const;
 };
 
-} // namespace models
-} // namespace healthcare
+// Utility functions
+std::string prescriptionStatusToString(PrescriptionStatus status);
+PrescriptionStatus stringToPrescriptionStatus(const std::string& status_str);
+std::string medicineFrequencyToString(MedicineFrequency frequency);
+MedicineFrequency stringToMedicineFrequency(const std::string& frequency_str);
+std::string medicineTypeToString(MedicineType type);
+MedicineType stringToMedicineType(const std::string& type_str);
+
+} // namespace healthcare::models

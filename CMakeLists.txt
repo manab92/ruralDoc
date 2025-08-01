@@ -17,163 +17,152 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
 endif()
 
+# Include directories
+include_directories(${CMAKE_SOURCE_DIR}/include)
+
 # Find required packages
 find_package(PkgConfig REQUIRED)
 
-# PostgreSQL
+# Core dependencies
+find_package(Threads REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(CURL REQUIRED)
+
+# Database dependencies
 find_package(PostgreSQL REQUIRED)
 pkg_check_modules(PQXX REQUIRED libpqxx)
 
-# OpenSSL
-find_package(OpenSSL REQUIRED)
-
-# CURL
-find_package(CURL REQUIRED)
-
-# Threads
-find_package(Threads REQUIRED)
-
-# nlohmann_json
+# JSON library
 find_package(nlohmann_json REQUIRED)
 
-# vcpkg packages
-find_package(Crow CONFIG REQUIRED)
-find_package(jwt-cpp CONFIG REQUIRED)
-find_package(redis++ CONFIG REQUIRED)
-find_package(hiredis CONFIG REQUIRED)
-find_package(spdlog CONFIG REQUIRED)
-find_package(GTest CONFIG REQUIRED)
+# Try to find vcpkg packages
+find_package(Crow CONFIG QUIET)
+find_package(jwt-cpp CONFIG QUIET)
+find_package(redis++ CONFIG QUIET)
+find_package(hiredis CONFIG QUIET)
+find_package(spdlog CONFIG QUIET)
 
-# Include directories
-include_directories(${CMAKE_SOURCE_DIR}/include)
-include_directories(${PostgreSQL_INCLUDE_DIRS})
-include_directories(${PQXX_INCLUDE_DIRS})
+# If vcpkg packages not found, try system packages
+if(NOT Crow_FOUND)
+    message(WARNING "Crow not found via vcpkg, trying system package")
+    find_path(CROW_INCLUDE_DIR crow.h PATHS /usr/include /usr/local/include)
+    if(CROW_INCLUDE_DIR)
+        add_library(Crow::Crow INTERFACE IMPORTED)
+        target_include_directories(Crow::Crow INTERFACE ${CROW_INCLUDE_DIR})
+    else()
+        message(FATAL_ERROR "Crow framework not found. Please install via vcpkg or system package manager.")
+    endif()
+endif()
 
-# Source files
-set(SOURCES
+if(NOT spdlog_FOUND)
+    message(WARNING "spdlog not found via vcpkg, trying system package")
+    find_path(SPDLOG_INCLUDE_DIR spdlog/spdlog.h PATHS /usr/include /usr/local/include)
+    if(SPDLOG_INCLUDE_DIR)
+        add_library(spdlog::spdlog INTERFACE IMPORTED)
+        target_include_directories(spdlog::spdlog INTERFACE ${SPDLOG_INCLUDE_DIR})
+    else()
+        message(FATAL_ERROR "spdlog not found. Please install via vcpkg or system package manager.")
+    endif()
+endif()
+
+# Main application source files
+set(MAIN_SOURCES
     src/main.cpp
-    
-    # Models
+)
+
+# Utility source files
+set(UTILITY_SOURCES
+    src/utils/Logger.cpp
+    src/utils/ConfigManager.cpp
+    src/utils/ValidationUtils.cpp
+    src/utils/CryptoUtils.cpp
+    src/utils/ResponseHelper.cpp
+)
+
+# Model source files
+set(MODEL_SOURCES
     src/models/BaseEntity.cpp
     src/models/User.cpp
     src/models/Doctor.cpp
     src/models/Clinic.cpp
     src/models/Appointment.cpp
     src/models/Prescription.cpp
-    
-    # Database
-    src/database/DatabaseManager.cpp
-    src/database/UserRepository.cpp
-    src/database/DoctorRepository.cpp
-    src/database/ClinicRepository.cpp
-    src/database/AppointmentRepository.cpp
-    src/database/PrescriptionRepository.cpp
-    
-    # Services
-    src/services/UserService.cpp
-    src/services/DoctorService.cpp
-    src/services/BookingService.cpp
-    src/services/PaymentService.cpp
-    src/services/NotificationService.cpp
-    src/services/ValidationService.cpp
-    
-    # Controllers
-    src/controllers/UserController.cpp
-    src/controllers/DoctorController.cpp
-    src/controllers/BookingController.cpp
-    src/controllers/AdminController.cpp
-    
-    # Middleware
-    src/middleware/AuthMiddleware.cpp
-    src/middleware/LoggingMiddleware.cpp
-    src/middleware/CorsMiddleware.cpp
-    
-    # Utilities
-    src/utils/Logger.cpp
-    src/utils/ConfigManager.cpp
-    src/utils/ResponseHelper.cpp
-    src/utils/ValidationUtils.cpp
-    src/utils/DateTimeUtils.cpp
-    src/utils/CryptoUtils.cpp
-    src/utils/FileUtils.cpp
 )
 
-# Header files
-set(HEADERS
-    # Models
-    include/models/BaseEntity.h
-    include/models/User.h
-    include/models/Doctor.h
-    include/models/Clinic.h
-    include/models/Appointment.h
-    include/models/Prescription.h
-    
-    # Database
-    include/database/DatabaseManager.h
-    include/database/BaseRepository.h
-    include/database/UserRepository.h
-    include/database/DoctorRepository.h
-    include/database/ClinicRepository.h
-    include/database/AppointmentRepository.h
-    include/database/PrescriptionRepository.h
-    
-    # Services
-    include/services/UserService.h
-    include/services/DoctorService.h
-    include/services/BookingService.h
-    include/services/PaymentService.h
-    include/services/NotificationService.h
-    include/services/ValidationService.h
-    
-    # Controllers
-    include/controllers/UserController.h
-    include/controllers/DoctorController.h
-    include/controllers/BookingController.h
-    include/controllers/AdminController.h
-    
-    # Middleware
-    include/middleware/AuthMiddleware.h
-    include/middleware/LoggingMiddleware.h
-    include/middleware/CorsMiddleware.h
-    
-    # Utilities
-    include/utils/Logger.h
-    include/utils/ConfigManager.h
-    include/utils/ResponseHelper.h
-    include/utils/ValidationUtils.h
-    include/utils/DateTimeUtils.h
-    include/utils/CryptoUtils.h
-    include/utils/FileUtils.h
-    
-    # Configuration
-    include/config/AppConfig.h
+# Database source files
+set(DATABASE_SOURCES
+    src/database/DatabaseManager.cpp
+    src/database/UserRepository.cpp
+)
+
+# Middleware source files
+set(MIDDLEWARE_SOURCES
+    src/middleware/AuthMiddleware.cpp
+    src/middleware/CorsMiddleware.cpp
+    src/middleware/LoggingMiddleware.cpp
+)
+
+# Service source files
+set(SERVICE_SOURCES
+    # Services will be added when implemented
+)
+
+# Controller source files  
+set(CONTROLLER_SOURCES
+    # Controllers will be added when implemented
+)
+
+# All source files
+set(ALL_SOURCES
+    ${MAIN_SOURCES}
+    ${UTILITY_SOURCES}
+    ${MODEL_SOURCES}
+    ${DATABASE_SOURCES}
+    ${MIDDLEWARE_SOURCES}
+    ${SERVICE_SOURCES}
+    ${CONTROLLER_SOURCES}
 )
 
 # Create main executable
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+add_executable(${PROJECT_NAME} ${ALL_SOURCES})
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    Crow::Crow
-    jwt-cpp::jwt-cpp
-    redis++::redis++
-    hiredis::hiredis
-    nlohmann_json::nlohmann_json
-    spdlog::spdlog
-    ${PostgreSQL_LIBRARIES}
-    ${PQXX_LIBRARIES}
+    Threads::Threads
     OpenSSL::SSL
     OpenSSL::Crypto
     CURL::libcurl
-    Threads::Threads
+    ${PostgreSQL_LIBRARIES}
+    ${PQXX_LIBRARIES}
+    nlohmann_json::nlohmann_json
 )
 
-# Compiler definitions
-target_compile_definitions(${PROJECT_NAME} PRIVATE
-    CROW_ENABLE_SSL
-    CROW_USE_BOOST=0
-    $<$<CONFIG:Debug>:DEBUG_BUILD>
-    $<$<CONFIG:Release>:RELEASE_BUILD>
+# Link optional packages if found
+if(Crow_FOUND)
+    target_link_libraries(${PROJECT_NAME} PRIVATE Crow::Crow)
+endif()
+
+if(spdlog_FOUND)
+    target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog)
+endif()
+
+if(jwt-cpp_FOUND)
+    target_link_libraries(${PROJECT_NAME} PRIVATE jwt-cpp::jwt-cpp)
+endif()
+
+if(redis++_FOUND)
+    target_link_libraries(${PROJECT_NAME} PRIVATE redis++::redis++)
+endif()
+
+if(hiredis_FOUND)
+    target_link_libraries(${PROJECT_NAME} PRIVATE hiredis::hiredis)
+endif()
+
+# Include directories
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${PostgreSQL_INCLUDE_DIRS}
+    ${PQXX_INCLUDE_DIRS}
 )
 
 # Link directories
@@ -181,53 +170,19 @@ target_link_directories(${PROJECT_NAME} PRIVATE
     ${PQXX_LIBRARY_DIRS}
 )
 
-# Testing
-enable_testing()
-
-# Test sources
-set(TEST_SOURCES
-    tests/main_test.cpp
-    tests/models/UserTest.cpp
-    tests/models/DoctorTest.cpp
-    tests/models/AppointmentTest.cpp
-    tests/services/UserServiceTest.cpp
-    tests/services/BookingServiceTest.cpp
-    tests/services/PaymentServiceTest.cpp
-    tests/database/UserRepositoryTest.cpp
-    tests/database/AppointmentRepositoryTest.cpp
-    tests/utils/ValidationUtilsTest.cpp
+# Compiler definitions
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    $<$<CONFIG:Debug>:DEBUG_BUILD>
+    $<$<CONFIG:Release>:RELEASE_BUILD>
+    HEALTHCARE_VERSION="${PROJECT_VERSION}"
 )
 
-# Create test executable
-add_executable(${PROJECT_NAME}_tests ${TEST_SOURCES})
+# Create directories for runtime
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/logs)
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/uploads)
 
-# Link test libraries
-target_link_libraries(${PROJECT_NAME}_tests PRIVATE
-    GTest::gtest
-    GTest::gtest_main
-    GTest::gmock
-    Crow::Crow
-    jwt-cpp::jwt-cpp
-    redis++::redis++
-    hiredis::hiredis
-    nlohmann_json::nlohmann_json
-    spdlog::spdlog
-    ${PostgreSQL_LIBRARIES}
-    ${PQXX_LIBRARIES}
-    OpenSSL::SSL
-    OpenSSL::Crypto
-    CURL::libcurl
-    Threads::Threads
-)
-
-# Include test directories
-target_include_directories(${PROJECT_NAME}_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/tests
-)
-
-# Add tests
-add_test(NAME unit_tests COMMAND ${PROJECT_NAME}_tests)
+# Copy configuration files to build directory
+configure_file(${CMAKE_SOURCE_DIR}/config/app.json ${CMAKE_BINARY_DIR}/config/app.json COPYONLY)
 
 # Installation
 install(TARGETS ${PROJECT_NAME}
@@ -235,39 +190,67 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 # Install configuration files
-install(DIRECTORY config/
+install(FILES config/app.json
     DESTINATION etc/${PROJECT_NAME}
-    FILES_MATCHING PATTERN "*.json"
 )
 
 # Install documentation
-install(DIRECTORY docs/
+install(FILES README.md docs/api.md
     DESTINATION share/doc/${PROJECT_NAME}
-    FILES_MATCHING PATTERN "*.md" PATTERN "*.html"
 )
 
-# CPack configuration
-set(CPACK_PACKAGE_NAME "Healthcare Booking System")
-set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Healthcare booking and management platform")
-set(CPACK_PACKAGE_VENDOR "Healthcare Solutions Inc.")
-set(CPACK_PACKAGE_CONTACT "info@healthcaresolutions.com")
+# Create log and upload directories in install location
+install(DIRECTORY DESTINATION var/log/${PROJECT_NAME})
+install(DIRECTORY DESTINATION var/lib/${PROJECT_NAME}/uploads)
 
-# Package types
-set(CPACK_GENERATOR "DEB;RPM;TGZ")
+# Development helpers
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    # Enable sanitizers in debug mode
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        target_compile_options(${PROJECT_NAME} PRIVATE
+            -fsanitize=address
+            -fsanitize=undefined
+            -fno-omit-frame-pointer
+        )
+        target_link_options(${PROJECT_NAME} PRIVATE
+            -fsanitize=address
+            -fsanitize=undefined
+        )
+    endif()
+endif()
 
-# Debian package settings
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libpq5, libssl1.1, libcurl4, redis-server, postgresql")
-set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Healthcare Solutions Inc.")
-set(CPACK_DEBIAN_PACKAGE_SECTION "misc")
-set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-
-# RPM package settings
-set(CPACK_RPM_PACKAGE_LICENSE "MIT")
-set(CPACK_RPM_PACKAGE_GROUP "Applications/Internet")
-set(CPACK_RPM_PACKAGE_REQUIRES "postgresql-libs, openssl-libs, libcurl, redis")
-
-include(CPack)
+# Testing (optional)
+option(BUILD_TESTS "Build test suite" OFF)
+if(BUILD_TESTS)
+    enable_testing()
+    find_package(GTest QUIET)
+    
+    if(GTest_FOUND)
+        set(TEST_SOURCES
+            tests/main_test.cpp
+            tests/utils/ValidationUtilsTest.cpp
+            tests/models/UserTest.cpp
+            tests/database/UserRepositoryTest.cpp
+        )
+        
+        add_executable(${PROJECT_NAME}_tests ${TEST_SOURCES})
+        
+        target_link_libraries(${PROJECT_NAME}_tests PRIVATE
+            GTest::gtest
+            GTest::gtest_main
+            # Add other libraries as needed
+        )
+        
+        target_include_directories(${PROJECT_NAME}_tests PRIVATE
+            ${CMAKE_SOURCE_DIR}/include
+            ${CMAKE_SOURCE_DIR}/tests
+        )
+        
+        add_test(NAME unit_tests COMMAND ${PROJECT_NAME}_tests)
+    else()
+        message(WARNING "GTest not found. Tests will not be built.")
+    endif()
+endif()
 
 # Custom targets
 add_custom_target(format
@@ -275,19 +258,58 @@ add_custom_target(format
     COMMENT "Formatting source code"
 )
 
-add_custom_target(lint
-    COMMAND find ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/include -name "*.cpp" -o -name "*.h" | xargs cpplint
-    COMMENT "Running code linter"
+add_custom_target(clean-build
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/CMakeFiles
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/CMakeCache.txt
+    COMMENT "Cleaning build files"
 )
 
-add_custom_target(docs
-    COMMAND doxygen Doxyfile
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Generating documentation"
+# Development tools
+add_custom_target(run
+    COMMAND ${CMAKE_BINARY_DIR}/${PROJECT_NAME}
+    DEPENDS ${PROJECT_NAME}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Running Healthcare Booking System"
 )
 
-# Print build information
+add_custom_target(debug
+    COMMAND gdb ${CMAKE_BINARY_DIR}/${PROJECT_NAME}
+    DEPENDS ${PROJECT_NAME}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Debugging Healthcare Booking System"
+)
+
+# Build information
+message(STATUS "========================================")
+message(STATUS "Healthcare Booking System Build Config")
+message(STATUS "========================================")
+message(STATUS "Version: ${PROJECT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
-message(STATUS "C++ flags: ${CMAKE_CXX_FLAGS}")
+message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "Install prefix: ${CMAKE_INSTALL_PREFIX}")
+message(STATUS "PostgreSQL found: ${PostgreSQL_FOUND}")
+message(STATUS "Crow found: ${Crow_FOUND}")
+message(STATUS "spdlog found: ${spdlog_FOUND}")
+message(STATUS "Build tests: ${BUILD_TESTS}")
+message(STATUS "========================================")
+
+# Package configuration (CPack)
+set(CPACK_PACKAGE_NAME "Healthcare Booking System")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A comprehensive healthcare appointment booking and management system")
+set(CPACK_PACKAGE_VENDOR "Healthcare Solutions")
+set(CPACK_PACKAGE_CONTACT "support@healthcare-booking.com")
+
+# Package types
+set(CPACK_GENERATOR "TGZ;ZIP")
+
+if(UNIX AND NOT APPLE)
+    list(APPEND CPACK_GENERATOR "DEB")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libpq5, libssl1.1, libcurl4, postgresql-client")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Healthcare Solutions")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "misc")
+    set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+endif()
+
+include(CPack)
