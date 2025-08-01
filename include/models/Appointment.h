@@ -1,70 +1,83 @@
 #pragma once
 
+#include "BaseEntity.h"
 #include <string>
 #include <chrono>
-#include <memory>
-#include "BaseEntity.h"
+#include <vector>
 
-namespace healthcare {
-namespace models {
+namespace healthcare::models {
 
 enum class AppointmentStatus {
-    PENDING = 1,
-    CONFIRMED = 2,
-    CANCELLED = 3,
-    COMPLETED = 4,
-    NO_SHOW = 5,
-    RESCHEDULED = 6
+    PENDING,
+    CONFIRMED,
+    IN_PROGRESS,
+    COMPLETED,
+    CANCELLED,
+    NO_SHOW,
+    RESCHEDULED
 };
 
 enum class AppointmentType {
-    ONLINE = 1,
-    OFFLINE = 2
+    ONLINE,
+    OFFLINE
 };
 
 enum class PaymentStatus {
-    PENDING = 1,
-    PAID = 2,
-    FAILED = 3,
-    REFUNDED = 4
+    PENDING,
+    PAID,
+    FAILED,
+    REFUNDED,
+    PARTIALLY_REFUNDED
+};
+
+enum class CancellationReason {
+    PATIENT_REQUEST,
+    DOCTOR_UNAVAILABLE,
+    EMERGENCY,
+    TECHNICAL_ISSUE,
+    WEATHER,
+    OTHER
+};
+
+struct PaymentInfo {
+    std::string payment_id;
+    std::string order_id;
+    std::string transaction_id;
+    double amount;
+    std::string currency;
+    PaymentStatus status;
+    std::string payment_method;  // RAZORPAY, CARD, UPI, etc.
+    std::chrono::system_clock::time_point paid_at;
+    std::string razorpay_signature;
+};
+
+struct CancellationInfo {
+    CancellationReason reason;
+    std::string description;
+    std::chrono::system_clock::time_point cancelled_at;
+    std::string cancelled_by_user_id;
+    double refund_amount;
+    std::string refund_id;
+    bool is_refund_processed;
+};
+
+struct ConsultationInfo {
+    std::string video_call_link;
+    std::string meeting_id;
+    std::string room_password;
+    std::chrono::system_clock::time_point call_started_at;
+    std::chrono::system_clock::time_point call_ended_at;
+    int duration_minutes;
+    std::string recording_url;  // Optional consultation recording
+    std::string call_notes;     // Doctor's notes during call
 };
 
 class Appointment : public BaseEntity {
-private:
-    std::string user_id_;
-    std::string doctor_id_;
-    std::string clinic_id_;
-    std::chrono::system_clock::time_point appointment_date_;
-    std::chrono::system_clock::time_point start_time_;
-    std::chrono::system_clock::time_point end_time_;
-    AppointmentType type_;
-    AppointmentStatus status_;
-    double consultation_fee_;
-    PaymentStatus payment_status_;
-    std::string payment_id_;
-    std::string payment_method_;
-    std::string symptoms_;
-    std::string notes_;
-    std::string prescription_id_;
-    std::string video_call_link_;
-    std::string cancellation_reason_;
-    std::chrono::system_clock::time_point cancelled_at_;
-    std::string cancelled_by_;  // user_id or doctor_id
-    bool is_follow_up_;
-    std::string parent_appointment_id_;  // For follow-up appointments
-    int reminder_sent_count_;
-    std::chrono::system_clock::time_point last_reminder_sent_;
-
 public:
-    // Constructors
     Appointment();
-    Appointment(const std::string& user_id, const std::string& doctor_id,
-                const std::chrono::system_clock::time_point& appointment_date,
-                const std::chrono::system_clock::time_point& start_time,
-                const std::chrono::system_clock::time_point& end_time,
-                AppointmentType type, double consultation_fee);
+    ~Appointment() override = default;
 
-    // Getters
+    // Core appointment details
     const std::string& getUserId() const { return user_id_; }
     const std::string& getDoctorId() const { return doctor_id_; }
     const std::string& getClinicId() const { return clinic_id_; }
@@ -73,78 +86,152 @@ public:
     const std::chrono::system_clock::time_point& getEndTime() const { return end_time_; }
     AppointmentType getType() const { return type_; }
     AppointmentStatus getStatus() const { return status_; }
-    double getConsultationFee() const { return consultation_fee_; }
-    PaymentStatus getPaymentStatus() const { return payment_status_; }
-    const std::string& getPaymentId() const { return payment_id_; }
-    const std::string& getPaymentMethod() const { return payment_method_; }
+
+    // Patient information
     const std::string& getSymptoms() const { return symptoms_; }
     const std::string& getNotes() const { return notes_; }
+    bool isEmergency() const { return is_emergency_; }
+    const std::string& getPatientAge() const { return patient_age_; }
+    const std::string& getPatientGender() const { return patient_gender_; }
+
+    // Financial details
+    double getConsultationFee() const { return consultation_fee_; }
+    const PaymentInfo& getPaymentInfo() const { return payment_info_; }
+
+    // Appointment management
+    const std::string& getConfirmationCode() const { return confirmation_code_; }
+    const std::chrono::system_clock::time_point& getBookedAt() const { return booked_at_; }
+    const std::chrono::system_clock::time_point& getConfirmedAt() const { return confirmed_at_; }
+
+    // Consultation details
+    const ConsultationInfo& getConsultationInfo() const { return consultation_info_; }
+    const CancellationInfo& getCancellationInfo() const { return cancellation_info_; }
+
+    // Follow-up information
     const std::string& getPrescriptionId() const { return prescription_id_; }
-    const std::string& getVideoCallLink() const { return video_call_link_; }
-    const std::string& getCancellationReason() const { return cancellation_reason_; }
-    const std::chrono::system_clock::time_point& getCancelledAt() const { return cancelled_at_; }
-    const std::string& getCancelledBy() const { return cancelled_by_; }
-    bool isFollowUp() const { return is_follow_up_; }
-    const std::string& getParentAppointmentId() const { return parent_appointment_id_; }
-    int getReminderSentCount() const { return reminder_sent_count_; }
-    const std::chrono::system_clock::time_point& getLastReminderSent() const { return last_reminder_sent_; }
+    const std::chrono::system_clock::time_point& getFollowUpDate() const { return follow_up_date_; }
+    const std::string& getFollowUpNotes() const { return follow_up_notes_; }
 
     // Setters
     void setUserId(const std::string& user_id) { user_id_ = user_id; }
     void setDoctorId(const std::string& doctor_id) { doctor_id_ = doctor_id; }
     void setClinicId(const std::string& clinic_id) { clinic_id_ = clinic_id; }
-    void setAppointmentDate(const std::chrono::system_clock::time_point& appointment_date) { appointment_date_ = appointment_date; }
+    void setAppointmentDate(const std::chrono::system_clock::time_point& date) { appointment_date_ = date; }
     void setStartTime(const std::chrono::system_clock::time_point& start_time) { start_time_ = start_time; }
     void setEndTime(const std::chrono::system_clock::time_point& end_time) { end_time_ = end_time; }
     void setType(AppointmentType type) { type_ = type; }
-    void setStatus(AppointmentStatus status) { status_ = status; }
-    void setConsultationFee(double consultation_fee) { consultation_fee_ = consultation_fee; }
-    void setPaymentStatus(PaymentStatus payment_status) { payment_status_ = payment_status; }
-    void setPaymentId(const std::string& payment_id) { payment_id_ = payment_id; }
-    void setPaymentMethod(const std::string& payment_method) { payment_method_ = payment_method; }
+    void setStatus(AppointmentStatus status) { status_ = status; updateTimestamp(); }
     void setSymptoms(const std::string& symptoms) { symptoms_ = symptoms; }
     void setNotes(const std::string& notes) { notes_ = notes; }
+    void setEmergency(bool is_emergency) { is_emergency_ = is_emergency; }
+    void setPatientAge(const std::string& age) { patient_age_ = age; }
+    void setPatientGender(const std::string& gender) { patient_gender_ = gender; }
+    void setConsultationFee(double fee) { consultation_fee_ = fee; }
+    void setPaymentInfo(const PaymentInfo& payment_info) { payment_info_ = payment_info; }
+    void setConfirmationCode(const std::string& code) { confirmation_code_ = code; }
+    void setBookedAt(const std::chrono::system_clock::time_point& booked_at) { booked_at_ = booked_at; }
+    void setConfirmedAt(const std::chrono::system_clock::time_point& confirmed_at) { confirmed_at_ = confirmed_at; }
+    void setConsultationInfo(const ConsultationInfo& consultation_info) { consultation_info_ = consultation_info; }
+    void setCancellationInfo(const CancellationInfo& cancellation_info) { cancellation_info_ = cancellation_info; }
     void setPrescriptionId(const std::string& prescription_id) { prescription_id_ = prescription_id; }
-    void setVideoCallLink(const std::string& video_call_link) { video_call_link_ = video_call_link; }
-    void setCancellationReason(const std::string& cancellation_reason) { cancellation_reason_ = cancellation_reason; }
-    void setCancelledAt(const std::chrono::system_clock::time_point& cancelled_at) { cancelled_at_ = cancelled_at; }
-    void setCancelledBy(const std::string& cancelled_by) { cancelled_by_ = cancelled_by; }
-    void setFollowUp(bool is_follow_up) { is_follow_up_ = is_follow_up; }
-    void setParentAppointmentId(const std::string& parent_appointment_id) { parent_appointment_id_ = parent_appointment_id; }
-    void setReminderSentCount(int reminder_sent_count) { reminder_sent_count_ = reminder_sent_count; }
-    void setLastReminderSent(const std::chrono::system_clock::time_point& last_reminder_sent) { last_reminder_sent_ = last_reminder_sent; }
+    void setFollowUpDate(const std::chrono::system_clock::time_point& date) { follow_up_date_ = date; }
+    void setFollowUpNotes(const std::string& notes) { follow_up_notes_ = notes; }
 
-    // Business methods
+    // Status management
     void confirmAppointment();
-    void cancelAppointment(const std::string& reason, const std::string& cancelled_by);
-    void completeAppointment();
-    void markAsNoShow();
-    void rescheduleAppointment(const std::chrono::system_clock::time_point& new_start_time,
-                              const std::chrono::system_clock::time_point& new_end_time);
+    void startConsultation();
+    void completeConsultation();
+    void cancelAppointment(CancellationReason reason, const std::string& description, const std::string& cancelled_by);
+    void markNoShow();
+    void rescheduleAppointment(const std::chrono::system_clock::time_point& new_start_time);
 
-    // Payment methods
-    void markPaymentPaid(const std::string& payment_id, const std::string& payment_method);
-    void markPaymentFailed();
-    void refundPayment();
+    // Payment operations
+    void processPayment(const PaymentInfo& payment_info);
+    void markPaymentFailed(const std::string& reason);
+    void processRefund(double refund_amount, const std::string& refund_id);
+
+    // Consultation management
+    void generateVideoCallLink();
+    void startVideoCall();
+    void endVideoCall();
+    bool isCallActive() const;
 
     // Utility methods
+    bool isPending() const { return status_ == AppointmentStatus::PENDING; }
+    bool isConfirmed() const { return status_ == AppointmentStatus::CONFIRMED; }
+    bool isCompleted() const { return status_ == AppointmentStatus::COMPLETED; }
+    bool isCancelled() const { return status_ == AppointmentStatus::CANCELLED; }
+    bool isOnline() const { return type_ == AppointmentType::ONLINE; }
+    bool isOffline() const { return type_ == AppointmentType::OFFLINE; }
+    bool isPaymentPending() const { return payment_info_.status == PaymentStatus::PENDING; }
+    bool isPaymentCompleted() const { return payment_info_.status == PaymentStatus::PAID; }
     bool canBeCancelled() const;
     bool canBeRescheduled() const;
+    bool requiresRefund() const;
+    
+    int getDurationMinutes() const;
+    std::chrono::minutes getTimeUntilAppointment() const;
     bool isUpcoming() const;
     bool isPast() const;
     bool isToday() const;
-    std::chrono::minutes getDuration() const;
-    bool needsReminder() const;
-    void incrementReminderCount();
 
     // Validation
     bool isValidTimeSlot() const;
-    bool isConflictingWith(const Appointment& other) const;
+    bool isValidFutureDate() const;
 
     // Serialization
     nlohmann::json toJson() const override;
     void fromJson(const nlohmann::json& json) override;
+
+private:
+    // Core details
+    std::string user_id_;
+    std::string doctor_id_;
+    std::string clinic_id_;
+    std::chrono::system_clock::time_point appointment_date_;
+    std::chrono::system_clock::time_point start_time_;
+    std::chrono::system_clock::time_point end_time_;
+    AppointmentType type_;
+    AppointmentStatus status_;
+
+    // Patient information
+    std::string symptoms_;
+    std::string notes_;
+    bool is_emergency_;
+    std::string patient_age_;
+    std::string patient_gender_;
+
+    // Financial
+    double consultation_fee_;
+    PaymentInfo payment_info_;
+
+    // Management
+    std::string confirmation_code_;
+    std::chrono::system_clock::time_point booked_at_;
+    std::chrono::system_clock::time_point confirmed_at_;
+
+    // Consultation and cancellation details
+    ConsultationInfo consultation_info_;
+    CancellationInfo cancellation_info_;
+
+    // Follow-up
+    std::string prescription_id_;
+    std::chrono::system_clock::time_point follow_up_date_;
+    std::string follow_up_notes_;
+
+    // Helper methods
+    std::string generateConfirmationCode();
+    std::string generateMeetingId();
 };
 
-} // namespace models
-} // namespace healthcare
+// Utility functions
+std::string appointmentStatusToString(AppointmentStatus status);
+AppointmentStatus stringToAppointmentStatus(const std::string& status_str);
+std::string appointmentTypeToString(AppointmentType type);
+AppointmentType stringToAppointmentType(const std::string& type_str);
+std::string paymentStatusToString(PaymentStatus status);
+PaymentStatus stringToPaymentStatus(const std::string& status_str);
+std::string cancellationReasonToString(CancellationReason reason);
+CancellationReason stringToCancellationReason(const std::string& reason_str);
+
+} // namespace healthcare::models

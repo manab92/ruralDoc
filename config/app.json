@@ -1,14 +1,15 @@
 {
+  "environment": "development",
+  "version": "1.0.0",
+  
   "server": {
     "host": "0.0.0.0",
     "port": 8080,
     "threads": 4,
+    "timeout": 30,
     "enable_logging": true,
-    "ssl": {
-      "enabled": false,
-      "cert_file": "certs/server.crt",
-      "key_file": "certs/server.key"
-    }
+    "max_request_size": "10MB",
+    "enable_compression": true
   },
   
   "database": {
@@ -16,11 +17,18 @@
     "port": 5432,
     "name": "healthcare_db",
     "username": "postgres",
-    "password": "your_password_here",
+    "password": "",
     "max_connections": 10,
-    "connection_timeout": 30,
+    "min_connections": 2,
+    "timeout": 30,
     "auto_migrate": true,
-    "pool_size": 20
+    "ssl_mode": "prefer",
+    "connection_pool": {
+      "initial_size": 5,
+      "max_size": 20,
+      "max_idle_time": 300,
+      "validation_interval": 60
+    }
   },
   
   "redis": {
@@ -28,147 +36,269 @@
     "port": 6379,
     "password": "",
     "database": 0,
-    "connection_timeout": 5,
-    "max_connections": 10
+    "timeout": 5000,
+    "max_connections": 10,
+    "retry_attempts": 3,
+    "retry_delay_ms": 500
   },
   
   "jwt": {
-    "secret": "your_jwt_secret_key_here_make_it_long_and_secure",
+    "secret": "your-super-secret-jwt-key-change-this-in-production",
     "issuer": "healthcare-booking-system",
     "expiry_hours": 24,
-    "refresh_expiry_days": 30
+    "refresh_threshold_hours": 4,
+    "algorithm": "HS256"
   },
   
-  "payment": {
-    "razorpay": {
-      "key_id": "your_razorpay_key_id",
-      "key_secret": "your_razorpay_key_secret",
-      "webhook_secret": "your_razorpay_webhook_secret"
+  "security": {
+    "password": {
+      "min_length": 8,
+      "require_uppercase": true,
+      "require_lowercase": true,
+      "require_numbers": true,
+      "require_special_chars": true,
+      "hash_rounds": 12
     },
-    "upi": {
-      "merchant_id": "your_upi_merchant_id",
-      "merchant_name": "Healthcare Booking System"
+    "rate_limiting": {
+      "enabled": true,
+      "global_limit": 1000,
+      "auth_limit": 10,
+      "registration_limit": 5
     },
-    "currency": "INR",
-    "timeout_seconds": 300,
-    "is_production": false
-  },
-  
-  "notification": {
-    "fcm": {
-      "server_key": "your_fcm_server_key",
-      "sender_id": "your_fcm_sender_id"
+    "session": {
+      "max_concurrent": 3,
+      "timeout_hours": 24,
+      "remember_me_days": 30
     },
-    "email": {
-      "smtp_host": "smtp.gmail.com",
-      "smtp_port": 587,
-      "username": "your_email@gmail.com",
-      "password": "your_app_password",
-      "from_name": "Healthcare Booking System",
-      "from_email": "noreply@healthcarebooking.com"
-    },
-    "sms": {
-      "provider": "twilio",
-      "account_sid": "your_twilio_account_sid",
-      "auth_token": "your_twilio_auth_token",
-      "from_number": "+1234567890"
+    "lockout": {
+      "max_attempts": 5,
+      "duration_minutes": 15,
+      "enabled": true
     }
+  },
+  
+  "cors": {
+    "allowed_origins": [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://127.0.0.1:3000",
+      "https://healthcare-app.com"
+    ],
+    "allow_credentials": true,
+    "max_age": 86400,
+    "exposed_headers": [
+      "X-Total-Count",
+      "X-Page-Count",
+      "X-Request-ID"
+    ]
   },
   
   "logging": {
     "level": "INFO",
     "file": "logs/healthcare.log",
     "console": true,
-    "max_file_size": "10MB",
-    "max_files": 5,
-    "format": "[%Y-%m-%d %H:%M:%S] [%l] %v"
+    "requests": true,
+    "responses": true,
+    "headers": false,
+    "body": false,
+    "slow_threshold_ms": 1000,
+    "rotation": {
+      "max_size": "100MB",
+      "max_files": 10,
+      "daily": true
+    }
   },
   
-  "cors": {
-    "allowed_origins": [
-      "http://localhost:3000",
-      "http://localhost:8080",
-      "https://yourdomain.com"
-    ],
-    "allowed_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    "allowed_headers": ["Content-Type", "Authorization", "X-Requested-With"],
-    "allow_credentials": true,
-    "max_age": 86400
+  "email": {
+    "provider": "smtp",
+    "smtp": {
+      "host": "smtp.gmail.com",
+      "port": 587,
+      "secure": false,
+      "username": "your-email@gmail.com",
+      "password": "your-app-password"
+    },
+    "from": {
+      "name": "Healthcare Booking System",
+      "email": "noreply@healthcare-booking.com"
+    },
+    "templates": {
+      "verification": "email_verification.html",
+      "password_reset": "password_reset.html",
+      "appointment_confirmation": "appointment_confirmation.html",
+      "appointment_reminder": "appointment_reminder.html"
+    }
   },
   
-  "security": {
-    "rate_limiting": {
+  "sms": {
+    "provider": "twilio",
+    "twilio": {
+      "account_sid": "your-twilio-account-sid",
+      "auth_token": "your-twilio-auth-token",
+      "from_number": "+1234567890"
+    },
+    "templates": {
+      "verification": "Your verification code is: {{code}}",
+      "appointment_reminder": "Reminder: You have an appointment with Dr. {{doctor_name}} at {{time}}"
+    }
+  },
+  
+  "payment": {
+    "provider": "razorpay",
+    "razorpay": {
+      "key_id": "your-razorpay-key-id",
+      "key_secret": "your-razorpay-key-secret",
+      "webhook_secret": "your-webhook-secret"
+    },
+    "currency": "INR",
+    "auto_capture": true,
+    "webhook_timeout": 30,
+    "refund": {
       "enabled": true,
-      "requests_per_minute": 100,
-      "burst_size": 20
-    },
-    "password": {
-      "min_length": 8,
-      "require_uppercase": true,
-      "require_lowercase": true,
-      "require_numbers": true,
-      "require_special": true
-    },
-    "session": {
-      "timeout_minutes": 30,
-      "max_concurrent_sessions": 5
+      "processing_fee": 2.0,
+      "cancellation_window_hours": 24
     }
   },
   
-  "file_storage": {
-    "type": "local",
-    "local": {
-      "upload_path": "uploads/",
-      "max_file_size": "10MB",
-      "allowed_extensions": [".jpg", ".jpeg", ".png", ".pdf"]
-    },
-    "aws_s3": {
-      "bucket": "healthcare-booking-uploads",
-      "region": "us-east-1",
-      "access_key": "your_aws_access_key",
-      "secret_key": "your_aws_secret_key"
+  "file_upload": {
+    "max_file_size": "10MB",
+    "allowed_types": [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ],
+    "storage": {
+      "type": "local",
+      "local": {
+        "path": "uploads/",
+        "url_prefix": "/uploads"
+      },
+      "s3": {
+        "bucket": "healthcare-uploads",
+        "region": "us-east-1",
+        "access_key": "your-access-key",
+        "secret_key": "your-secret-key"
+      }
     }
   },
   
-  "booking": {
-    "advance_booking_days": 30,
-    "cancellation_hours": 2,
-    "reminder_hours": [24, 2],
-    "emergency_booking_enabled": true,
-    "follow_up_period_days": 7,
-    "max_appointments_per_day": 10
+  "notifications": {
+    "push": {
+      "enabled": true,
+      "firebase": {
+        "server_key": "your-firebase-server-key",
+        "project_id": "your-firebase-project-id"
+      }
+    },
+    "email": {
+      "enabled": true,
+      "queue": true,
+      "retry_attempts": 3
+    },
+    "sms": {
+      "enabled": true,
+      "queue": true,
+      "retry_attempts": 3
+    }
   },
   
-  "video_call": {
-    "provider": "agora",
-    "app_id": "your_agora_app_id",
-    "app_certificate": "your_agora_app_certificate",
-    "session_timeout_minutes": 60
+  "appointment": {
+    "booking": {
+      "advance_booking_days": 30,
+      "cancellation_window_hours": 24,
+      "reschedule_window_hours": 12,
+      "slot_duration_minutes": 30,
+      "buffer_time_minutes": 15
+    },
+    "reminders": {
+      "enabled": true,
+      "email_hours_before": [24, 2],
+      "sms_hours_before": [24, 1],
+      "push_hours_before": [24, 2, 0.5]
+    }
+  },
+  
+  "doctor": {
+    "verification": {
+      "auto_approve": false,
+      "required_documents": [
+        "medical_license",
+        "degree_certificate",
+        "experience_certificate"
+      ],
+      "approval_timeout_days": 7
+    },
+    "availability": {
+      "max_slots_per_day": 20,
+      "min_break_minutes": 30,
+      "default_consultation_minutes": 30
+    }
   },
   
   "monitoring": {
-    "health_check_interval": 30,
-    "metrics_enabled": true,
-    "prometheus_port": 9090,
+    "health_check": {
+      "enabled": true,
+      "interval_seconds": 60,
+      "timeout_seconds": 10
+    },
+    "metrics": {
+      "enabled": true,
+      "endpoint": "/metrics",
+      "retention_days": 30
+    },
     "alerts": {
-      "email_recipients": ["admin@healthcarebooking.com"],
-      "critical_threshold": 90,
-      "warning_threshold": 75
+      "enabled": true,
+      "email": "admin@healthcare-booking.com",
+      "slack_webhook": "your-slack-webhook-url"
     }
   },
   
   "cache": {
-    "ttl_seconds": 3600,
-    "user_session_ttl": 1800,
-    "doctor_availability_ttl": 300,
-    "appointment_cache_ttl": 600
+    "default_ttl": 3600,
+    "user_profile_ttl": 1800,
+    "doctor_profile_ttl": 3600,
+    "appointment_ttl": 900,
+    "search_results_ttl": 300
   },
   
-  "business_rules": {
-    "consultation_duration_minutes": 30,
-    "emergency_fee_multiplier": 1.5,
-    "cancellation_fee_percentage": 10,
-    "late_cancellation_hours": 2,
-    "doctor_rating_threshold": 4.0
+  "api": {
+    "version": "v1",
+    "rate_limit": {
+      "window_minutes": 15,
+      "max_requests": 1000
+    },
+    "pagination": {
+      "default_page_size": 20,
+      "max_page_size": 100
+    },
+    "documentation": {
+      "enabled": true,
+      "swagger_ui": true,
+      "openapi_spec": "/api/v1/openapi.json"
+    }
+  },
+  
+  "features": {
+    "user_registration": true,
+    "doctor_registration": true,
+    "online_consultation": true,
+    "offline_consultation": true,
+    "prescription_management": true,
+    "payment_gateway": true,
+    "appointment_reminders": true,
+    "clinic_management": true,
+    "admin_panel": true,
+    "analytics": true
+  },
+  
+  "development": {
+    "debug": true,
+    "hot_reload": false,
+    "mock_services": false,
+    "seed_data": true,
+    "profiling": false
   }
 }

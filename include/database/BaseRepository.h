@@ -1,305 +1,247 @@
 #pragma once
 
+#include "DatabaseManager.h"
+#include "../models/BaseEntity.h"
+#include "../utils/Logger.h"
 #include <string>
 #include <vector>
 #include <memory>
+#include <chrono>
 #include <optional>
-#include <functional>
-#include "DatabaseManager.h"
-#include "../models/BaseEntity.h"
+#include <pqxx/pqxx>
 
-namespace healthcare {
-namespace database {
+namespace healthcare::database {
 
 template<typename T>
-class BaseRepository {
-protected:
-    DatabaseManager& db_manager_;
-    std::string table_name_;
-    std::string cache_prefix_;
-
-public:
-    explicit BaseRepository(const std::string& table_name, const std::string& cache_prefix = "")
-        : db_manager_(DatabaseManager::getInstance()), 
-          table_name_(table_name),
-          cache_prefix_(cache_prefix.empty() ? table_name + ":" : cache_prefix + ":") {}
-
-    virtual ~BaseRepository() = default;
-
-    // Pure virtual methods to be implemented by derived classes
-    virtual std::unique_ptr<T> fromRow(const pqxx::row& row) = 0;
-    virtual std::string getInsertQuery(const T& entity) = 0;
-    virtual std::string getUpdateQuery(const T& entity) = 0;
-    virtual std::vector<std::string> getInsertParams(const T& entity) = 0;
-    virtual std::vector<std::string> getUpdateParams(const T& entity) = 0;
-
-    // CRUD operations
-    virtual std::optional<std::unique_ptr<T>> findById(const std::string& id) {
-        // Try cache first
-        if (!cache_prefix_.empty()) {
-            std::string cache_key = cache_prefix_ + id;
-            auto cached_json = db_manager_.getCacheJson(cache_key);
-            if (!cached_json.is_null()) {
-                auto entity = std::make_unique<T>();
-                entity->fromJson(cached_json);
-                return entity;
-            }
-        }
-
-        // Query database
-        std::string query = "SELECT * FROM " + table_name_ + " WHERE id = $1";
-        auto result = db_manager_.executeQuery(query, {id});
-        
-        if (result.empty()) {
-            return std::nullopt;
-        }
-
-        auto entity = fromRow(result[0]);
-        
-        // Cache the result
-        if (!cache_prefix_.empty() && entity) {
-            std::string cache_key = cache_prefix_ + id;
-            db_manager_.setCacheJson(cache_key, entity->toJson(), 3600);
-        }
-
-        return entity;
-    }
-
-    virtual std::vector<std::unique_ptr<T>> findAll(int limit = 100, int offset = 0) {
-        std::string query = "SELECT * FROM " + table_name_ + 
-                           " ORDER BY created_at DESC LIMIT $1 OFFSET $2";
-        auto result = db_manager_.executeQuery(query, {std::to_string(limit), std::to_string(offset)});
-        
-        std::vector<std::unique_ptr<T>> entities;
-        for (const auto& row : result) {
-            entities.push_back(fromRow(row));
-        }
-        
-        return entities;
-    }
-
-    virtual std::vector<std::unique_ptr<T>> findByCondition(const std::string& condition, 
-                                                           const std::vector<std::string>& params = {}) {
-        std::string query = "SELECT * FROM " + table_name_ + " WHERE " + condition;
-        auto result = db_manager_.executeQuery(query, params);
-        
-        std::vector<std::unique_ptr<T>> entities;
-        for (const auto& row : result) {
-            entities.push_back(fromRow(row));
-        }
-        
-        return entities;
-    }
-
-    virtual bool create(T& entity) {
-        try {
-            auto transaction = db_manager_.beginTransaction();
-            
-            // Generate ID if not set
-            if (entity.getId().empty()) {
-                entity.setId(generateUUID());
-            }
-            
-            // Set timestamps
-            auto now = std::chrono::system_clock::now();
-            entity.setCreatedAt(now);
-            entity.setUpdatedAt(now);
-
-            std::string query = getInsertQuery(entity);
-            std::vector<std::string> params = getInsertParams(entity);
-            
-            auto result = transaction->exec_params(query, 
-                params[0], params[1], params[2], params[3], params[4], 
-                params[5], params[6], params[7], params[8], params[9]);
-            
-            db_manager_.commitTransaction(transaction);
-            
-            // Cache the entity
-            if (!cache_prefix_.empty()) {
-                std::string cache_key = cache_prefix_ + entity.getId();
-                db_manager_.setCacheJson(cache_key, entity.toJson(), 3600);
-            }
-            
-            return true;
-        } catch (const std::exception& e) {
-            throw DatabaseException("Failed to create entity: " + std::string(e.what()));
-        }
-    }
-
-    virtual bool update(T& entity) {
-        try {
-            auto transaction = db_manager_.beginTransaction();
-            
-            // Update timestamp
-            entity.updateTimestamp();
-
-            std::string query = getUpdateQuery(entity);
-            std::vector<std::string> params = getUpdateParams(entity);
-            
-            auto result = transaction->exec_params(query, 
-                params[0], params[1], params[2], params[3], params[4], 
-                params[5], params[6], params[7], params[8], params[9]);
-            
-            if (result.affected_rows() == 0) {
-                db_manager_.rollbackTransaction(transaction);
-                return false;
-            }
-            
-            db_manager_.commitTransaction(transaction);
-            
-            // Update cache
-            if (!cache_prefix_.empty()) {
-                std::string cache_key = cache_prefix_ + entity.getId();
-                db_manager_.setCacheJson(cache_key, entity.toJson(), 3600);
-            }
-            
-            return true;
-        } catch (const std::exception& e) {
-            throw DatabaseException("Failed to update entity: " + std::string(e.what()));
-        }
-    }
-
-    virtual bool deleteById(const std::string& id) {
-        try {
-            std::string query = "DELETE FROM " + table_name_ + " WHERE id = $1";
-            auto result = db_manager_.executeQuery(query, {id});
-            
-            if (result.affected_rows() == 0) {
-                return false;
-            }
-            
-            // Remove from cache
-            if (!cache_prefix_.empty()) {
-                std::string cache_key = cache_prefix_ + id;
-                db_manager_.deleteCache(cache_key);
-            }
-            
-            return true;
-        } catch (const std::exception& e) {
-            throw DatabaseException("Failed to delete entity: " + std::string(e.what()));
-        }
-    }
-
-    virtual bool exists(const std::string& id) {
-        // Check cache first
-        if (!cache_prefix_.empty()) {
-            std::string cache_key = cache_prefix_ + id;
-            if (db_manager_.existsInCache(cache_key)) {
-                return true;
-            }
-        }
-        
-        std::string query = "SELECT 1 FROM " + table_name_ + " WHERE id = $1 LIMIT 1";
-        auto result = db_manager_.executeQuery(query, {id});
-        return !result.empty();
-    }
-
-    virtual int count() {
-        std::string query = "SELECT COUNT(*) FROM " + table_name_;
-        auto result = db_manager_.executeQuery(query);
-        return result[0][0].as<int>();
-    }
-
-    virtual int countByCondition(const std::string& condition, 
-                               const std::vector<std::string>& params = {}) {
-        std::string query = "SELECT COUNT(*) FROM " + table_name_ + " WHERE " + condition;
-        auto result = db_manager_.executeQuery(query, params);
-        return result[0][0].as<int>();
-    }
-
-    // Batch operations
-    virtual bool createBatch(std::vector<T>& entities) {
-        try {
-            auto transaction = db_manager_.beginTransaction();
-            
-            for (auto& entity : entities) {
-                if (entity.getId().empty()) {
-                    entity.setId(generateUUID());
-                }
-                
-                auto now = std::chrono::system_clock::now();
-                entity.setCreatedAt(now);
-                entity.setUpdatedAt(now);
-
-                std::string query = getInsertQuery(entity);
-                std::vector<std::string> params = getInsertParams(entity);
-                
-                transaction->exec_params(query, 
-                    params[0], params[1], params[2], params[3], params[4], 
-                    params[5], params[6], params[7], params[8], params[9]);
-            }
-            
-            db_manager_.commitTransaction(transaction);
-            
-            // Cache entities
-            if (!cache_prefix_.empty()) {
-                for (const auto& entity : entities) {
-                    std::string cache_key = cache_prefix_ + entity.getId();
-                    db_manager_.setCacheJson(cache_key, entity.toJson(), 3600);
-                }
-            }
-            
-            return true;
-        } catch (const std::exception& e) {
-            throw DatabaseException("Failed to create batch: " + std::string(e.what()));
-        }
-    }
-
-    virtual void clearCache() {
-        if (!cache_prefix_.empty()) {
-            // This is a simplified implementation - in production, you'd want to use Redis SCAN
-            // to find and delete all keys with the prefix
-            db_manager_.clearCache();
-        }
-    }
-
-protected:
-    std::string generateUUID() {
-        // Simple UUID generation - in production, use a proper UUID library
-        static std::random_device rd;
-        static std::mt19937 gen(rd());
-        static std::uniform_int_distribution<> dis(0, 15);
-        static std::uniform_int_distribution<> dis2(8, 11);
-        
-        std::stringstream ss;
-        ss << std::hex;
-        for (int i = 0; i < 8; i++) {
-            ss << dis(gen);
-        }
-        ss << "-";
-        for (int i = 0; i < 4; i++) {
-            ss << dis(gen);
-        }
-        ss << "-4";
-        for (int i = 0; i < 3; i++) {
-            ss << dis(gen);
-        }
-        ss << "-";
-        ss << dis2(gen);
-        for (int i = 0; i < 3; i++) {
-            ss << dis(gen);
-        }
-        ss << "-";
-        for (int i = 0; i < 12; i++) {
-            ss << dis(gen);
-        }
-        return ss.str();
-    }
-
-    std::string timePointToString(const std::chrono::system_clock::time_point& tp) {
-        auto time_t = std::chrono::system_clock::to_time_t(tp);
-        std::stringstream ss;
-        ss << std::put_time(std::gmtime(&time_t), "%Y-%m-%d %H:%M:%S");
-        return ss.str();
-    }
-
-    std::chrono::system_clock::time_point stringToTimePoint(const std::string& str) {
-        std::tm tm = {};
-        std::stringstream ss(str);
-        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
-        return std::chrono::system_clock::from_time_t(std::mktime(&tm));
+struct QueryResult {
+    bool success = false;
+    std::vector<T> data;
+    std::string error_message;
+    int total_count = 0;
+    
+    QueryResult() = default;
+    QueryResult(bool success) : success(success) {}
+    QueryResult(const std::vector<T>& data) : success(true), data(data), total_count(data.size()) {}
+    QueryResult(const std::string& error) : success(false), error_message(error) {}
+    
+    bool hasData() const { return success && !data.empty(); }
+    T getFirst() const { return hasData() ? data[0] : T{}; }
+    std::optional<T> getFirstOptional() const { 
+        return hasData() ? std::make_optional(data[0]) : std::nullopt; 
     }
 };
 
-} // namespace database
-} // namespace healthcare
+struct PaginationParams {
+    int page = 1;
+    int page_size = 20;
+    std::string order_by = "created_at";
+    std::string order_direction = "DESC";
+    
+    int getOffset() const { return (page - 1) * page_size; }
+    std::string getOrderClause() const { 
+        return "ORDER BY " + order_by + " " + order_direction;
+    }
+    std::string getLimitClause() const {
+        return "LIMIT " + std::to_string(page_size) + " OFFSET " + std::to_string(getOffset());
+    }
+};
+
+struct FilterParams {
+    std::map<std::string, std::string> string_filters;
+    std::map<std::string, int> int_filters;
+    std::map<std::string, bool> bool_filters;
+    std::map<std::string, std::chrono::system_clock::time_point> date_filters;
+    std::vector<std::string> search_fields;
+    std::string search_term;
+    
+    bool hasFilters() const {
+        return !string_filters.empty() || !int_filters.empty() || 
+               !bool_filters.empty() || !date_filters.empty() || !search_term.empty();
+    }
+    
+    std::string buildWhereClause() const;
+    std::vector<std::string> getParameterValues() const;
+};
+
+template<typename T>
+class BaseRepository {
+public:
+    explicit BaseRepository(const std::string& table_name) 
+        : table_name_(table_name), db_manager_(DatabaseManager::getInstance()) {}
+    
+    virtual ~BaseRepository() = default;
+
+    // Basic CRUD operations
+    virtual QueryResult<T> create(const T& entity);
+    virtual QueryResult<T> findById(const std::string& id);
+    virtual QueryResult<T> update(const T& entity);
+    virtual bool deleteById(const std::string& id);
+    virtual bool softDeleteById(const std::string& id);
+    
+    // Bulk operations
+    virtual QueryResult<T> createBatch(const std::vector<T>& entities);
+    virtual QueryResult<T> updateBatch(const std::vector<T>& entities);
+    virtual bool deleteBatch(const std::vector<std::string>& ids);
+    
+    // Query operations
+    virtual QueryResult<T> findAll(const PaginationParams& pagination = {});
+    virtual QueryResult<T> findByFilter(const FilterParams& filters, 
+                                       const PaginationParams& pagination = {});
+    virtual QueryResult<T> findByQuery(const std::string& custom_query, 
+                                      const std::vector<std::string>& params = {});
+    
+    // Count operations
+    virtual int countAll();
+    virtual int countByFilter(const FilterParams& filters);
+    virtual int countByQuery(const std::string& custom_query, 
+                           const std::vector<std::string>& params = {});
+    
+    // Existence checks
+    virtual bool exists(const std::string& id);
+    virtual bool existsByFilter(const FilterParams& filters);
+    
+    // Search operations
+    virtual QueryResult<T> search(const std::string& search_term, 
+                                 const std::vector<std::string>& search_fields,
+                                 const PaginationParams& pagination = {});
+    
+    // Transaction support
+    virtual QueryResult<T> createInTransaction(const T& entity, DatabaseManager::Transaction& transaction);
+    virtual QueryResult<T> updateInTransaction(const T& entity, DatabaseManager::Transaction& transaction);
+    virtual bool deleteInTransaction(const std::string& id, DatabaseManager::Transaction& transaction);
+    
+    // Cache operations
+    virtual void cacheEntity(const T& entity, int ttl_seconds = 3600);
+    virtual std::optional<T> getCachedEntity(const std::string& id);
+    virtual void removeCachedEntity(const std::string& id);
+    virtual void clearEntityCache();
+    
+    // Utility methods
+    std::string getTableName() const { return table_name_; }
+    virtual std::string getSelectQuery() const;
+    virtual std::string getInsertQuery() const;
+    virtual std::string getUpdateQuery() const;
+    virtual std::string getDeleteQuery() const;
+    
+    // Statistics and monitoring
+    struct RepositoryStats {
+        long long total_queries = 0;
+        long long successful_queries = 0;
+        long long failed_queries = 0;
+        long long cache_hits = 0;
+        long long cache_misses = 0;
+        double average_query_time_ms = 0.0;
+        std::chrono::system_clock::time_point last_query_time;
+    };
+    
+    RepositoryStats getStats() const { return stats_; }
+    void resetStats() { stats_ = RepositoryStats{}; }
+
+protected:
+    std::string table_name_;
+    DatabaseManager& db_manager_;
+    mutable RepositoryStats stats_;
+    
+    // Pure virtual methods that must be implemented by derived classes
+    virtual T mapRowToEntity(const pqxx::row& row) const = 0;
+    virtual std::vector<std::string> getInsertValues(const T& entity) const = 0;
+    virtual std::vector<std::string> getUpdateValues(const T& entity) const = 0;
+    virtual std::string getIdColumn() const { return "id"; }
+    virtual std::vector<std::string> getColumnNames() const = 0;
+    virtual std::vector<std::string> getSearchableColumns() const = 0;
+    
+    // Helper methods
+    std::string buildSelectQuery(const std::string& where_clause = "", 
+                                const std::string& order_clause = "",
+                                const std::string& limit_clause = "") const;
+    
+    std::string buildInsertQuery(const std::vector<std::string>& columns) const;
+    std::string buildUpdateQuery(const std::vector<std::string>& columns, 
+                                const std::string& where_clause) const;
+    std::string buildDeleteQuery(const std::string& where_clause) const;
+    std::string buildCountQuery(const std::string& where_clause = "") const;
+    
+    std::string escapeIdentifier(const std::string& identifier) const;
+    std::string buildPlaceholders(int count, int start_index = 1) const;
+    
+    // Error handling and logging
+    void logQuery(const std::string& query, double duration_ms, bool success = true) const;
+    void logError(const std::string& operation, const std::string& error) const;
+    void updateStats(bool success, double duration_ms) const;
+    
+    // Cache key generation
+    std::string generateCacheKey(const std::string& id) const;
+    std::string generateListCacheKey(const std::string& suffix = "") const;
+    
+    // Validation helpers
+    bool validateEntity(const T& entity) const;
+    bool validateId(const std::string& id) const;
+    
+    // Query execution with error handling and timing
+    template<typename Func>
+    auto executeWithTiming(Func&& func) const -> decltype(func()) {
+        auto start = std::chrono::high_resolution_clock::now();
+        bool success = false;
+        
+        try {
+            auto result = func();
+            success = true;
+            
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            double duration_ms = duration.count() / 1000.0;
+            
+            updateStats(success, duration_ms);
+            return result;
+            
+        } catch (const std::exception& e) {
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            double duration_ms = duration.count() / 1000.0;
+            
+            updateStats(false, duration_ms);
+            logError("Query execution", e.what());
+            throw;
+        }
+    }
+    
+    // Batch processing helpers
+    std::vector<std::vector<T>> chunkEntities(const std::vector<T>& entities, int chunk_size = 100) const;
+    QueryResult<T> processBatchInChunks(const std::vector<T>& entities, 
+                                       std::function<QueryResult<T>(const std::vector<T>&)> processor) const;
+};
+
+// Repository factory for creating typed repositories
+class RepositoryFactory {
+public:
+    template<typename T, typename RepoType>
+    static std::unique_ptr<RepoType> create(const std::string& table_name) {
+        return std::make_unique<RepoType>(table_name);
+    }
+    
+    template<typename RepoType>
+    static std::unique_ptr<RepoType> createTyped() {
+        return std::make_unique<RepoType>();
+    }
+};
+
+// Convenience macros for repository operations
+#define REPO_TRY_EXECUTE(operation, error_msg) \
+    try { \
+        return operation; \
+    } catch (const std::exception& e) { \
+        logError(error_msg, e.what()); \
+        return QueryResult<T>(error_msg + ": " + e.what()); \
+    }
+
+#define REPO_VALIDATE_ID(id) \
+    if (!validateId(id)) { \
+        return QueryResult<T>("Invalid ID provided"); \
+    }
+
+#define REPO_VALIDATE_ENTITY(entity) \
+    if (!validateEntity(entity)) { \
+        return QueryResult<T>("Invalid entity data"); \
+    }
+
+} // namespace healthcare::database

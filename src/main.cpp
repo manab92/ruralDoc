@@ -1,247 +1,420 @@
 #include <iostream>
 #include <memory>
 #include <signal.h>
+#include <csignal>
 #include <crow.h>
 #include <nlohmann/json.hpp>
 
-// Configuration
-#include "../include/config/AppConfig.h"
+// Utilities
+#include "../include/utils/Logger.h"
+#include "../include/utils/ConfigManager.h"
+#include "../include/utils/ResponseHelper.h"
 
 // Database
 #include "../include/database/DatabaseManager.h"
-
-// Services
-#include "../include/services/UserService.h"
-#include "../include/services/BookingService.h"
-#include "../include/services/PaymentService.h"
-#include "../include/services/NotificationService.h"
-
-// Controllers
-#include "../include/controllers/UserController.h"
-#include "../include/controllers/BookingController.h"
-#include "../include/controllers/DoctorController.h"
-#include "../include/controllers/AdminController.h"
 
 // Middleware
 #include "../include/middleware/AuthMiddleware.h"
 #include "../include/middleware/LoggingMiddleware.h"
 #include "../include/middleware/CorsMiddleware.h"
 
-// Utilities
-#include "../include/utils/Logger.h"
-#include "../include/utils/ConfigManager.h"
-
 using namespace healthcare;
 
-// Global application state
-std::unique_ptr<crow::Crow<crow::CookieParser, middleware::AuthMiddleware>> app;
-bool is_shutting_down = false;
+// Application singleton
+class HealthcareApplication {
+public:
+    static HealthcareApplication& getInstance() {
+        static HealthcareApplication instance;
+        return instance;
+    }
+
+    bool initialize(const std::string& config_file = "config/app.json") {
+        try {
+            // Initialize configuration
+            if (!utils::GlobalConfig::initialize(config_file)) {
+                std::cerr << "Failed to load configuration from: " << config_file << std::endl;
+                return false;
+            }
+
+            auto& config = utils::GlobalConfig::getInstance();
+            
+            // Initialize logger
+            utils::Logger::getInstance().configure(
+                config.getString("logging.level", "INFO"),
+                config.getString("logging.file", "healthcare.log"),
+                config.getBool("logging.console", true)
+            );
+
+            LOG_INFO("========================================");
+            LOG_INFO("Healthcare Booking System Starting...");
+            LOG_INFO("========================================");
+
+            // Initialize database
+            database::DatabaseConfig db_config;
+            db_config.host = config.getString("database.host", "localhost");
+            db_config.port = config.getInt("database.port", 5432);
+            db_config.database = config.getString("database.name", "healthcare_db");
+            db_config.username = config.getString("database.username", "postgres");
+            db_config.password = config.getString("database.password", "");
+            db_config.max_connections = config.getInt("database.max_connections", 10);
+            db_config.connection_timeout_seconds = config.getInt("database.timeout", 30);
+
+            database::RedisConfig redis_config;
+            redis_config.host = config.getString("redis.host", "localhost");
+            redis_config.port = config.getInt("redis.port", 6379);
+            redis_config.password = config.getString("redis.password", "");
+            redis_config.database = config.getInt("redis.database", 0);
+
+            auto& db_manager = database::DatabaseManager::getInstance();
+            db_manager.configure(db_config, redis_config);
+            
+            if (!db_manager.connect()) {
+                LOG_ERROR("Failed to connect to database");
+                return false;
+            }
+
+            LOG_INFO("Database connection established");
+
+            // Run database migrations if configured
+            if (config.getBool("database.auto_migrate", true)) {
+                if (!db_manager.migrateDatabase()) {
+                    LOG_ERROR("Database migration failed");
+                    return false;
+                }
+                LOG_INFO("Database migration completed");
+            }
+
+            // Create Crow application with middleware
+            app_ = std::make_unique<crow::App<
+                middleware::LoggingMiddleware,
+                middleware::CorsMiddleware,
+                middleware::AuthMiddleware
+            >>();
+
+            // Configure middleware
+            configureMiddleware();
+
+            // Register routes
+            registerRoutes();
+
+            // Configure server settings
+            configureServer();
+
+            LOG_INFO("Application initialized successfully");
+            return true;
+
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to initialize application: " << e.what() << std::endl;
+            LOG_ERROR("Application initialization failed: {}", e.what());
+            return false;
+        }
+    }
+
+    void run() {
+        if (!app_) {
+            throw std::runtime_error("Application not initialized");
+        }
+
+        auto& config = utils::GlobalConfig::getInstance();
+        
+        // Server configuration
+        int port = config.getInt("server.port", 8080);
+        std::string host = config.getString("server.host", "0.0.0.0");
+        int threads = config.getInt("server.threads", std::thread::hardware_concurrency());
+
+        LOG_INFO("Starting server on {}:{} with {} threads", host, port, threads);
+        std::cout << "Healthcare Booking System running on " << host << ":" << port << std::endl;
+        std::cout << "API Documentation: http://" << host << ":" << port << "/api/v1/docs" << std::endl;
+        std::cout << "Health Check: http://" << host << ":" << port << "/api/v1/health" << std::endl;
+        std::cout << "Press Ctrl+C to stop the server" << std::endl;
+
+        try {
+            app_->port(port)
+                .bindaddr(host)
+                .multithreaded(threads)
+                .run();
+        } catch (const std::exception& e) {
+            LOG_ERROR("Server error: {}", e.what());
+            throw;
+        }
+    }
+
+    void shutdown() {
+        LOG_INFO("Initiating graceful shutdown...");
+        
+        if (app_) {
+            app_->stop();
+        }
+
+        // Disconnect from database
+        try {
+            database::DatabaseManager::getInstance().disconnect();
+            LOG_INFO("Database disconnected");
+        } catch (const std::exception& e) {
+            LOG_ERROR("Error during database disconnect: {}", e.what());
+        }
+
+        LOG_INFO("Shutdown completed");
+        utils::Logger::getInstance().flush();
+    }
+
+    bool isRunning() const {
+        return app_ != nullptr;
+    }
+
+private:
+    HealthcareApplication() = default;
+    ~HealthcareApplication() {
+        shutdown();
+    }
+
+    std::unique_ptr<crow::App<
+        middleware::LoggingMiddleware,
+        middleware::CorsMiddleware,
+        middleware::AuthMiddleware
+    >> app_;
+
+    void configureMiddleware() {
+        auto& config = utils::GlobalConfig::getInstance();
+
+        // Configure logging middleware
+        auto& logging_middleware = app_->get_middleware<middleware::LoggingMiddleware>();
+        logging_middleware.setLogRequests(config.getBool("logging.requests", true));
+        logging_middleware.setLogResponses(config.getBool("logging.responses", true));
+        logging_middleware.setLogHeaders(config.getBool("logging.headers", false));
+        logging_middleware.setLogBody(config.getBool("logging.body", false));
+        logging_middleware.setSlowRequestThreshold(config.getDouble("logging.slow_threshold_ms", 1000.0));
+
+        // Configure CORS middleware
+        auto& cors_middleware = app_->get_middleware<middleware::CorsMiddleware>();
+        cors_middleware.setAllowedOrigins(config.getStringArray("cors.allowed_origins"));
+        cors_middleware.setAllowedMethods({"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"});
+        cors_middleware.setAllowedHeaders({
+            "Content-Type", "Authorization", "X-Requested-With", 
+            "Accept", "Origin", "Cache-Control", "X-File-Name"
+        });
+        cors_middleware.setAllowCredentials(config.getBool("cors.allow_credentials", true));
+        cors_middleware.setMaxAge(config.getInt("cors.max_age", 86400));
+
+        // Configure authentication middleware
+        auto& auth_middleware = app_->get_middleware<middleware::AuthMiddleware>();
+        auth_middleware.setJwtSecret(config.getString("jwt.secret"));
+        auth_middleware.setJwtIssuer(config.getString("jwt.issuer", "healthcare-booking"));
+        auth_middleware.setTokenExpiryHours(config.getInt("jwt.expiry_hours", 24));
+
+        // Configure public endpoints
+        std::vector<std::string> public_endpoints = {
+            "/api/v1/auth/register",
+            "/api/v1/auth/login",
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/reset-password",
+            "/api/v1/auth/verify-email",
+            "/api/v1/health",
+            "/api/v1/docs",
+            "/api/v1/doctors/search",
+            "/api/v1/clinics/search"
+        };
+
+        for (const auto& endpoint : public_endpoints) {
+            auth_middleware.addPublicEndpoint(endpoint);
+        }
+
+        // Configure admin endpoints
+        std::vector<std::string> admin_endpoints = {
+            "/api/v1/admin",
+            "/api/v1/admin/users",
+            "/api/v1/admin/doctors",
+            "/api/v1/admin/statistics",
+            "/api/v1/admin/system"
+        };
+
+        for (const auto& endpoint : admin_endpoints) {
+            auth_middleware.addAdminEndpoint(endpoint);
+        }
+
+        LOG_INFO("Middleware configured successfully");
+    }
+
+    void registerRoutes() {
+        // Health check endpoint
+        CROW_ROUTE((*app_), "/api/v1/health")
+        ([&](const crow::request& req) {
+            try {
+                nlohmann::json health_data;
+                health_data["status"] = "healthy";
+                health_data["timestamp"] = std::time(nullptr);
+                health_data["version"] = "1.0.0";
+                health_data["environment"] = utils::GlobalConfig::getInstance().getString("environment", "development");
+                
+                // Database health check
+                auto& db_manager = database::DatabaseManager::getInstance();
+                health_data["database"] = db_manager.getHealthStatus();
+                
+                // System info
+                health_data["system"]["uptime"] = std::time(nullptr); // Simplified uptime
+                health_data["system"]["memory"] = "N/A"; // Could add actual memory info
+                
+                bool is_healthy = db_manager.isConnected();
+                
+                return utils::ResponseHelper::healthCheck(health_data, is_healthy);
+            } catch (const std::exception& e) {
+                LOG_ERROR("Health check error: {}", e.what());
+                nlohmann::json error_data;
+                error_data["error"] = e.what();
+                return utils::ResponseHelper::healthCheck(error_data, false);
+            }
+        });
+
+        // API documentation endpoint
+        CROW_ROUTE((*app_), "/api/v1/docs")
+        ([](const crow::request& req) {
+            std::string docs_html = R"(
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Healthcare Booking System API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { color: #2c3e50; }
+        .endpoint { background: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .method { font-weight: bold; color: #27ae60; }
+        .path { font-family: monospace; color: #2980b9; }
+    </style>
+</head>
+<body>
+    <h1>Healthcare Booking System API Documentation</h1>
+    <p>Welcome to the Healthcare Booking System API. This system provides endpoints for:</p>
+    <ul>
+        <li>User registration and authentication</li>
+        <li>Doctor profile management</li>
+        <li>Appointment booking and management</li>
+        <li>Prescription management</li>
+        <li>Payment processing</li>
+        <li>Administrative functions</li>
+    </ul>
+    
+    <h2>Quick Reference</h2>
+    <div class="endpoint">
+        <span class="method">GET</span> <span class="path">/api/v1/health</span> - System health check
+    </div>
+    <div class="endpoint">
+        <span class="method">POST</span> <span class="path">/api/v1/auth/register</span> - User registration
+    </div>
+    <div class="endpoint">
+        <span class="method">POST</span> <span class="path">/api/v1/auth/login</span> - User login
+    </div>
+    <div class="endpoint">
+        <span class="method">GET</span> <span class="path">/api/v1/doctors/search</span> - Search doctors
+    </div>
+    
+    <p>For complete API documentation, please refer to the docs/api.md file in the repository.</p>
+    <p><strong>Base URL:</strong> /api/v1</p>
+    <p><strong>Authentication:</strong> Bearer token required for most endpoints</p>
+</body>
+</html>
+            )";
+            
+            return crow::response(200, docs_html);
+        });
+
+        // Root endpoint redirect
+        CROW_ROUTE((*app_), "/")
+        ([](const crow::request& req) {
+            return crow::response(302, "", {{"Location", "/api/v1/docs"}});
+        });
+
+        // API info endpoint
+        CROW_ROUTE((*app_), "/api/v1")
+        ([](const crow::request& req) {
+            nlohmann::json api_info;
+            api_info["name"] = "Healthcare Booking System API";
+            api_info["version"] = "1.0.0";
+            api_info["description"] = "REST API for healthcare appointment booking and management";
+            api_info["documentation"] = "/api/v1/docs";
+            api_info["health_check"] = "/api/v1/health";
+            
+            return utils::ResponseHelper::success(api_info, "API information retrieved successfully");
+        });
+
+        // 404 handler
+        CROW_CATCHALL_ROUTE((*app_))
+        ([](const crow::request& req) {
+            LOG_WARN("404 - Endpoint not found: {} {}", req.method_string(), req.url);
+            return utils::ResponseHelper::notFound("Endpoint not found: " + std::string(req.method_string()) + " " + req.url);
+        });
+
+        LOG_INFO("Routes registered successfully");
+    }
+
+    void configureServer() {
+        auto& config = utils::GlobalConfig::getInstance();
+
+        // Server configuration
+        app_->server_name("Healthcare Booking System v1.0.0");
+        
+        // Enable logging if configured
+        if (config.getBool("server.enable_logging", true)) {
+            app_->loglevel(crow::LogLevel::Info);
+        }
+
+        // Configure timeouts and limits
+        app_->timeout(config.getInt("server.timeout", 30));
+        
+        LOG_INFO("Server configured successfully");
+    }
+};
+
+// Global shutdown flag
+volatile std::sig_atomic_t shutdown_requested = 0;
 
 // Signal handler for graceful shutdown
 void signalHandler(int signal) {
-    std::cout << "\nReceived signal " << signal << ". Initiating graceful shutdown..." << std::endl;
-    is_shutting_down = true;
+    std::cout << "\nReceived signal " << signal << ". Shutting down..." << std::endl;
+    shutdown_requested = 1;
     
-    if (app) {
-        app->stop();
-    }
-    
-    // Cleanup database connections
-    database::DatabaseManager::getInstance().disconnect();
-    
-    std::cout << "Shutdown complete." << std::endl;
-    exit(0);
-}
-
-// Initialize application components
-bool initializeApplication() {
     try {
-        // Load configuration
-        auto config_manager = std::make_unique<utils::ConfigManager>();
-        if (!config_manager->loadConfig("config/app.json")) {
-            std::cerr << "Failed to load application configuration" << std::endl;
-            return false;
-        }
-
-        // Initialize logger
-        utils::Logger::getInstance().configure(
-            config_manager->getString("logging.level", "INFO"),
-            config_manager->getString("logging.file", "healthcare.log"),
-            config_manager->getBool("logging.console", true)
-        );
-
-        utils::Logger::getInstance().info("Starting Healthcare Booking System...");
-
-        // Initialize database
-        auto& db_manager = database::DatabaseManager::getInstance();
-        
-        database::DatabaseConfig db_config;
-        db_config.host = config_manager->getString("database.host", "localhost");
-        db_config.port = config_manager->getInt("database.port", 5432);
-        db_config.database = config_manager->getString("database.name", "healthcare_db");
-        db_config.username = config_manager->getString("database.username", "postgres");
-        db_config.password = config_manager->getString("database.password", "");
-        db_config.max_connections = config_manager->getInt("database.max_connections", 10);
-
-        database::RedisConfig redis_config;
-        redis_config.host = config_manager->getString("redis.host", "localhost");
-        redis_config.port = config_manager->getInt("redis.port", 6379);
-        redis_config.password = config_manager->getString("redis.password", "");
-        redis_config.database = config_manager->getInt("redis.database", 0);
-
-        db_manager.configure(db_config, redis_config);
-        
-        if (!db_manager.connect()) {
-            std::cerr << "Failed to connect to database" << std::endl;
-            return false;
-        }
-
-        utils::Logger::getInstance().info("Database connection established");
-
-        // Create database tables if needed
-        if (config_manager->getBool("database.auto_migrate", true)) {
-            if (!db_manager.migrateDatabase()) {
-                std::cerr << "Database migration failed" << std::endl;
-                return false;
-            }
-            utils::Logger::getInstance().info("Database migration completed");
-        }
-
-        return true;
+        HealthcareApplication::getInstance().shutdown();
     } catch (const std::exception& e) {
-        std::cerr << "Failed to initialize application: " << e.what() << std::endl;
-        return false;
+        std::cerr << "Error during shutdown: " << e.what() << std::endl;
     }
-}
-
-// Configure middleware
-void configureMiddleware(crow::Crow<crow::CookieParser, middleware::AuthMiddleware>& app, 
-                        const utils::ConfigManager& config) {
-    // CORS middleware
-    auto cors_middleware = std::make_unique<middleware::CorsMiddleware>();
-    cors_middleware->setAllowedOrigins(config.getStringArray("cors.allowed_origins"));
-    cors_middleware->setAllowedMethods({"GET", "POST", "PUT", "DELETE", "OPTIONS"});
-    cors_middleware->setAllowedHeaders({"Content-Type", "Authorization", "X-Requested-With"});
-
-    // Authentication middleware
-    auto auth_middleware = std::get<1>(app.middlewares);
-    auth_middleware.setJwtSecret(config.getString("jwt.secret"));
-    auth_middleware.setJwtIssuer(config.getString("jwt.issuer", "healthcare-booking"));
-    auth_middleware.setTokenExpiryHours(config.getInt("jwt.expiry_hours", 24));
-
-    // Add public endpoints
-    auth_middleware.addPublicEndpoint("/api/v1/auth/register");
-    auth_middleware.addPublicEndpoint("/api/v1/auth/login");
-    auth_middleware.addPublicEndpoint("/api/v1/auth/forgot-password");
-    auth_middleware.addPublicEndpoint("/api/v1/auth/reset-password");
-    auth_middleware.addPublicEndpoint("/api/v1/health");
-    auth_middleware.addPublicEndpoint("/api/v1/docs");
-
-    // Add admin endpoints
-    auth_middleware.addAdminEndpoint("/api/v1/admin");
-    auth_middleware.addAdminEndpoint("/api/v1/users/admin");
-    auth_middleware.addAdminEndpoint("/api/v1/statistics");
-}
-
-// Register API routes
-void registerRoutes(crow::Crow<crow::CookieParser, middleware::AuthMiddleware>& app) {
-    // Health check endpoint
-    CROW_ROUTE(app, "/api/v1/health")
-    ([&](const crow::request& req) {
-        nlohmann::json response;
-        response["status"] = "healthy";
-        response["timestamp"] = std::time(nullptr);
-        response["version"] = "1.0.0";
-        response["database"] = database::DatabaseManager::getInstance().getHealthStatus();
-        
-        return crow::response(200, response.dump());
-    });
-
-    // API documentation endpoint
-    CROW_ROUTE(app, "/api/v1/docs")
-    ([](const crow::request& req) {
-        return crow::load_text("docs/api.html");
-    });
-
-    // Register controller routes
-    auto user_controller = std::make_unique<controllers::UserController>();
-    user_controller->registerRoutes(app);
-
-    auto booking_controller = std::make_unique<controllers::BookingController>();
-    booking_controller->registerRoutes(app);
-
-    auto doctor_controller = std::make_unique<controllers::DoctorController>();
-    doctor_controller->registerRoutes(app);
-
-    auto admin_controller = std::make_unique<controllers::AdminController>();
-    admin_controller->registerRoutes(app);
-
-    utils::Logger::getInstance().info("API routes registered successfully");
-}
-
-// Configure application settings
-void configureApp(crow::Crow<crow::CookieParser, middleware::AuthMiddleware>& app,
-                 const utils::ConfigManager& config) {
-    // Set server configuration
-    app.port(config.getInt("server.port", 8080))
-       .multithreaded(config.getInt("server.threads", 4))
-       .server_name("Healthcare Booking System")
-       .bindaddr(config.getString("server.host", "0.0.0.0"));
-
-    // Set request limits
-    app.get_context<crow::CookieParser>(app).set_cookie_max_age(3600);
     
-    // Enable logging
-    if (config.getBool("server.enable_logging", true)) {
-        app.loglevel(crow::LogLevel::Info);
-    }
-
-    utils::Logger::getInstance().info("Application configured successfully");
+    std::exit(signal);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     try {
-        // Set up signal handlers
-        signal(SIGINT, signalHandler);
-        signal(SIGTERM, signalHandler);
+        // Set up signal handlers for graceful shutdown
+        std::signal(SIGINT, signalHandler);   // Ctrl+C
+        std::signal(SIGTERM, signalHandler);  // Termination request
+        
+        // Parse command line arguments
+        std::string config_file = "config/app.json";
+        if (argc > 1) {
+            config_file = argv[1];
+        }
 
-        std::cout << "Healthcare Booking System starting..." << std::endl;
+        std::cout << "Healthcare Booking System" << std::endl;
+        std::cout << "=========================" << std::endl;
+        std::cout << "Configuration: " << config_file << std::endl;
 
-        // Initialize application
-        if (!initializeApplication()) {
-            std::cerr << "Application initialization failed" << std::endl;
+        // Initialize and run application
+        auto& app = HealthcareApplication::getInstance();
+        
+        if (!app.initialize(config_file)) {
+            std::cerr << "Failed to initialize application" << std::endl;
             return 1;
         }
 
-        // Load configuration
-        auto config_manager = std::make_unique<utils::ConfigManager>();
-        config_manager->loadConfig("config/app.json");
-
-        // Create Crow application with middleware
-        app = std::make_unique<crow::Crow<crow::CookieParser, middleware::AuthMiddleware>>();
-
-        // Configure middleware
-        configureMiddleware(*app, *config_manager);
-
-        // Configure application settings
-        configureApp(*app, *config_manager);
-
-        // Register routes
-        registerRoutes(*app);
-
-        // Start server
-        int port = config_manager->getInt("server.port", 8080);
-        std::string host = config_manager->getString("server.host", "0.0.0.0");
-
-        std::cout << "Server starting on " << host << ":" << port << std::endl;
-        utils::Logger::getInstance().info("Server starting on " + host + ":" + std::to_string(port));
-
-        // Run the server
-        app->run();
+        // Run the application
+        app.run();
 
     } catch (const std::exception& e) {
         std::cerr << "Application error: " << e.what() << std::endl;
-        utils::Logger::getInstance().error("Application error: " + std::string(e.what()));
+        LOG_ERROR("Application error: {}", e.what());
+        return 1;
+    } catch (...) {
+        std::cerr << "Unknown application error occurred" << std::endl;
+        LOG_ERROR("Unknown application error occurred");
         return 1;
     }
 
