@@ -1,0 +1,174 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "threads": 4,
+    "enable_logging": true,
+    "ssl": {
+      "enabled": false,
+      "cert_file": "certs/server.crt",
+      "key_file": "certs/server.key"
+    }
+  },
+  
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "healthcare_db",
+    "username": "postgres",
+    "password": "your_password_here",
+    "max_connections": 10,
+    "connection_timeout": 30,
+    "auto_migrate": true,
+    "pool_size": 20
+  },
+  
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "password": "",
+    "database": 0,
+    "connection_timeout": 5,
+    "max_connections": 10
+  },
+  
+  "jwt": {
+    "secret": "your_jwt_secret_key_here_make_it_long_and_secure",
+    "issuer": "healthcare-booking-system",
+    "expiry_hours": 24,
+    "refresh_expiry_days": 30
+  },
+  
+  "payment": {
+    "razorpay": {
+      "key_id": "your_razorpay_key_id",
+      "key_secret": "your_razorpay_key_secret",
+      "webhook_secret": "your_razorpay_webhook_secret"
+    },
+    "upi": {
+      "merchant_id": "your_upi_merchant_id",
+      "merchant_name": "Healthcare Booking System"
+    },
+    "currency": "INR",
+    "timeout_seconds": 300,
+    "is_production": false
+  },
+  
+  "notification": {
+    "fcm": {
+      "server_key": "your_fcm_server_key",
+      "sender_id": "your_fcm_sender_id"
+    },
+    "email": {
+      "smtp_host": "smtp.gmail.com",
+      "smtp_port": 587,
+      "username": "your_email@gmail.com",
+      "password": "your_app_password",
+      "from_name": "Healthcare Booking System",
+      "from_email": "noreply@healthcarebooking.com"
+    },
+    "sms": {
+      "provider": "twilio",
+      "account_sid": "your_twilio_account_sid",
+      "auth_token": "your_twilio_auth_token",
+      "from_number": "+1234567890"
+    }
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "file": "logs/healthcare.log",
+    "console": true,
+    "max_file_size": "10MB",
+    "max_files": 5,
+    "format": "[%Y-%m-%d %H:%M:%S] [%l] %v"
+  },
+  
+  "cors": {
+    "allowed_origins": [
+      "http://localhost:3000",
+      "http://localhost:8080",
+      "https://yourdomain.com"
+    ],
+    "allowed_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "allowed_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+    "allow_credentials": true,
+    "max_age": 86400
+  },
+  
+  "security": {
+    "rate_limiting": {
+      "enabled": true,
+      "requests_per_minute": 100,
+      "burst_size": 20
+    },
+    "password": {
+      "min_length": 8,
+      "require_uppercase": true,
+      "require_lowercase": true,
+      "require_numbers": true,
+      "require_special": true
+    },
+    "session": {
+      "timeout_minutes": 30,
+      "max_concurrent_sessions": 5
+    }
+  },
+  
+  "file_storage": {
+    "type": "local",
+    "local": {
+      "upload_path": "uploads/",
+      "max_file_size": "10MB",
+      "allowed_extensions": [".jpg", ".jpeg", ".png", ".pdf"]
+    },
+    "aws_s3": {
+      "bucket": "healthcare-booking-uploads",
+      "region": "us-east-1",
+      "access_key": "your_aws_access_key",
+      "secret_key": "your_aws_secret_key"
+    }
+  },
+  
+  "booking": {
+    "advance_booking_days": 30,
+    "cancellation_hours": 2,
+    "reminder_hours": [24, 2],
+    "emergency_booking_enabled": true,
+    "follow_up_period_days": 7,
+    "max_appointments_per_day": 10
+  },
+  
+  "video_call": {
+    "provider": "agora",
+    "app_id": "your_agora_app_id",
+    "app_certificate": "your_agora_app_certificate",
+    "session_timeout_minutes": 60
+  },
+  
+  "monitoring": {
+    "health_check_interval": 30,
+    "metrics_enabled": true,
+    "prometheus_port": 9090,
+    "alerts": {
+      "email_recipients": ["admin@healthcarebooking.com"],
+      "critical_threshold": 90,
+      "warning_threshold": 75
+    }
+  },
+  
+  "cache": {
+    "ttl_seconds": 3600,
+    "user_session_ttl": 1800,
+    "doctor_availability_ttl": 300,
+    "appointment_cache_ttl": 600
+  },
+  
+  "business_rules": {
+    "consultation_duration_minutes": 30,
+    "emergency_fee_multiplier": 1.5,
+    "cancellation_fee_percentage": 10,
+    "late_cancellation_hours": 2,
+    "doctor_rating_threshold": 4.0
+  }
+}
