@@ -245,3 +245,6 @@ public:
     }
 
 } // namespace healthcare::database
+
+// Include template implementation
+#include "BaseRepository.tpp"
