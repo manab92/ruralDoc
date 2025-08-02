@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Medinova</string>
+    <string name="good_morning">Good Morning! 👋</string>
+    <string name="find_your_doctor">Find Your Doctor</string>
+    <string name="search_placeholder">Search doctors, diseases...</string>
+    <string name="consult_doctor">Consult a Doctor</string>
+    <string name="find_specialist">Find Specialist</string>
+    <string name="choose_department">Choose a department or symptom</string>
+    <string name="top_doctor">Top Doctor</string>
+    <string name="see_all">See All</string>
+    <string name="my_appointment">My Appointment</string>
+    <string name="upcoming">Upcoming</string>
+    <string name="past">Past</string>
+    <string name="message">Message</string>
+    <string name="voice_call">Voice Call</string>
+    <string name="video_call">Video Call</string>
+    <string name="today">Today</string>
+    <string name="yesterday">Yesterday</string>
+    <string name="search">Search</string>
+    <string name="join">Join</string>
+    <string name="reschedule">Reschedule</string>
+    <string name="cancel">Cancel</string>
+    <string name="online">Online</string>
+    <string name="complete">Complete</string>
+    <string name="scheduled">Scheduled</string>
+    <string name="ongoing">Ongoing</string>
+    <string name="cancelled">Cancelled</string>
+    <string name="personal_information">Personal Information</string>
+    <string name="history">History</string>
+    <string name="people">People</string>
+    <string name="notification">Notification</string>
+    <string name="reminder">Reminder</string>
+    <string name="contact_doctor">Contact Doctor</string>
+    <string name="chatting">Chatting</string>
+    <string name="settings">Settings</string>
+    <string name="help_support">Help &amp; Support</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="logout">Logout</string>
+    <string name="version">Version 1.0.0</string>
+    <string name="appointments">Appointments</string>
+    <string name="consultations">Consultations</string>
+    <string name="reviews">Reviews</string>
+</resources>

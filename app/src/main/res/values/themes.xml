@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Theme.Medinova" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize your light theme here. -->
+        <item name="colorPrimary">@color/medinova_primary</item>
+        <item name="colorPrimaryVariant">@color/medinova_primary_variant</item>
+        <item name="colorSecondary">@color/medinova_secondary</item>
+        <item name="android:colorBackground">@color/medinova_background</item>
+        <item name="colorSurface">@color/medinova_surface</item>
+        <item name="colorError">@color/medinova_error</item>
+        <item name="colorOnPrimary">@color/medinova_on_primary</item>
+        <item name="colorOnSecondary">@color/medinova_on_secondary</item>
+        <item name="colorOnBackground">@color/medinova_on_background</item>
+        <item name="colorOnSurface">@color/medinova_on_surface</item>
+        <item name="colorOnError">@color/medinova_on_error</item>
+        <!-- Status bar color. -->
+        <item name="android:statusBarColor">@color/medinova_primary</item>
+        <!-- Customize your theme here. -->
+    </style>
+    
+    <style name="Theme.Medinova.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+</resources>
