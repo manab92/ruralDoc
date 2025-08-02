@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- Medinova Color Palette -->
+    <color name="medinova_primary">#FF4A90E2</color>
+    <color name="medinova_primary_variant">#FF357ABD</color>
+    <color name="medinova_secondary">#FF50C878</color>
+    <color name="medinova_secondary_variant">#FF3DA660</color>
+    
+    <color name="medinova_background">#FFF8F9FA</color>
+    <color name="medinova_surface">#FFFFFFFF</color>
+    <color name="medinova_error">#FFE74C3C</color>
+    
+    <color name="medinova_on_primary">#FFFFFFFF</color>
+    <color name="medinova_on_secondary">#FFFFFFFF</color>
+    <color name="medinova_on_background">#FF2C3E50</color>
+    <color name="medinova_on_surface">#FF2C3E50</color>
+    <color name="medinova_on_error">#FFFFFFFF</color>
+    
+    <!-- Additional Colors -->
+    <color name="medinova_gray">#FF95A5A6</color>
+    <color name="medinova_light_gray">#FFF5F6FA</color>
+    <color name="medinova_dark_gray">#FF34495E</color>
+    <color name="medinova_accent">#FF9B59B6</color>
+    <color name="medinova_success">#FF27AE60</color>
+    <color name="medinova_warning">#FFF39C12</color>
+    
+    <!-- Status Colors -->
+    <color name="online_green">#FF00D32D</color>
+    <color name="offline_gray">#FF8E8E93</color>
+    
+    <!-- Chat Colors -->
+    <color name="sent_message_blue">#FF007AFF</color>
+    <color name="received_message_gray">#FFE5E5EA</color>
+</resources>
